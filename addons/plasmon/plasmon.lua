@@ -1,5 +1,5 @@
 --[[
-plasmon v1.20130613
+plasmon v1.20140530
 
 Copyright (c) 2013, Giuliano Riccio
 All rights reserved.
@@ -28,15 +28,13 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ]]
 
-require 'chat'
-require 'logger'
+require('logger')
+config = require('config')
 
-local config = require 'config'
-
-_addon = {}
-_addon.name     = 'plasmon'
-_addon.version  = '1.20130613'
-_addon.commands = 'plasmon'
+_addon.name    = 'plasmon'
+_addon.author  = 'Zohno'
+_addon.version = '1.20140530'
+_addon.command = 'plasmon'
 
 tb_name       = 'addon:gr:plasmon'
 track         = false
@@ -56,8 +54,6 @@ stats.airlixirs2     = 0
 stats.tot_airlixirs2 = 0
 
 defaults = T{}
-defaults.v         = 0
-defaults.first_run = true
 defaults.light     = false
 defaults.timer     = true
 
@@ -111,7 +107,7 @@ defaults.colors.airlixir.value.r = 147
 defaults.colors.airlixir.value.g = 161
 defaults.colors.airlixir.value.b = 161
 
-settings = T{}
+settings = config.load(defaults)
 
 -- plugin functions
 
@@ -125,7 +121,7 @@ function parse_options(args)
 
         local option = args:remove(1):sub(2)
 
-        if type(args[1]) ~= 'nil' and not args[1]:match('^-%a') then
+        if args[1] ~= nil and not args[1]:match('^-%a') then
             options[option] = args:remove(1)
         else
             options[option] = true
@@ -136,22 +132,22 @@ function parse_options(args)
 end
 
 function test()
-    add_to_chat(148, 'Now permeating the mists surrounding the fracture.')
-    add_to_chat(148, 'You receive 50 corpuscles of mweya plasm.')
-    add_to_chat(121, 'You find an airlixir on the Mob')
-    add_to_chat(148, 'You receive 50 corpuscles of mweya plasm.')
-    add_to_chat(148, 'You receive 50 corpuscles of mweya plasm.')
-    add_to_chat(148, 'You receive 150 corpuscles of mweya plasm.')
-    add_to_chat(148, 'You receive 50 corpuscles of mweya plasm.')
-    add_to_chat(121, 'You find an airlixir on the Mob')
-    add_to_chat(148, 'You receive 500 corpuscles of mweya plasm.')
-    add_to_chat(121, 'You find an airlixir on the Mob')
-    add_to_chat(121, 'You find an airlixir on the Mob')
-    add_to_chat(121, 'You find an airlixir on the Mob')
-    add_to_chat(121, 'You find an airlixir on the Mob')
-    add_to_chat(121, 'You find an airlixir +1 on the Mob')
-    add_to_chat(121, 'You find an airlixir +2 on the Mob')
-    add_to_chat(146, 'Your time has expired for this battle. Now exiting...')
+    windower.add_to_chat(148, 'Now permeating the mists surrounding the fracture.')
+    windower.add_to_chat(148, 'You receive 50 corpuscles of mweya plasm.')
+    windower.add_to_chat(121, 'You find an airlixir on the Mob')
+    windower.add_to_chat(148, 'You receive 50 corpuscles of mweya plasm.')
+    windower.add_to_chat(148, 'You receive 50 corpuscles of mweya plasm.')
+    windower.add_to_chat(148, 'You receive 150 corpuscles of mweya plasm.')
+    windower.add_to_chat(148, 'You receive 50 corpuscles of mweya plasm.')
+    windower.add_to_chat(121, 'You find an airlixir on the Mob')
+    windower.add_to_chat(148, 'You receive 500 corpuscles of mweya plasm.')
+    windower.add_to_chat(121, 'You find an airlixir on the Mob')
+    windower.add_to_chat(121, 'You find an airlixir on the Mob')
+    windower.add_to_chat(121, 'You find an airlixir on the Mob')
+    windower.add_to_chat(121, 'You find an airlixir on the Mob')
+    windower.add_to_chat(121, 'You find an airlixir +1 on the Mob')
+    windower.add_to_chat(121, 'You find an airlixir +2 on the Mob')
+    windower.add_to_chat(146, 'Your time has expired for this battle. Now exiting...')
     show_window()
 end
 
@@ -183,11 +179,11 @@ function stop_tracking()
 end
 
 function start_timer()
-    send_command('timers create Delve 2700 down ../../../addons/plasmon/icon')
+    windower.send_command('timers create Delve 2700 down ../../../addons/plasmon/icon')
 end
 
 function stop_timer()
-    send_command('timers delete Delve')
+    windower.send_command('timers delete Delve')
 end
 
 function refresh_window()
@@ -212,7 +208,7 @@ function refresh_window()
         ' \\cs('..airlixir_colors.value.r..', '..airlixir_colors.value.g..', '..airlixir_colors.value.b..')'..stats.airlixirs2..'/'..stats.tot_airlixirs2..'\\cr'
     }
 
-    tb_set_text(tb_name, text:concat(''))
+    windower.text.set_text(tb_name, text:concat(''))
 end
 
 function reset_stats()
@@ -236,13 +232,13 @@ end
 
 function show_window()
     visible = true
-    tb_set_visibility(tb_name, true)
+    windower.text.set_visibility(tb_name, true)
     refresh_window()
 end
 
 function hide_window()
     visible = false
-    tb_set_visibility(tb_name, false)
+    windower.text.set_visibility(tb_name, false)
 end
 
 function toggle_window()
@@ -257,80 +253,41 @@ function show_report()
     log('[Plasm '..(stats.plasm..'/'..stats.tot_plasm):color(258)..'] [Mobs '..(stats.mobs..'/'..stats.tot_mobs):color(258)..'] [Airlixir '..(stats.airlixirs..'/'..stats.tot_airlixirs):color(258)..' | +1 '..(stats.airlixirs1..'/'..stats.tot_airlixirs1):color(258)..' | +2 '..(stats.airlixirs2..'/'..stats.tot_airlixirs2):color(258)..']')
 end
 
-function first_run()
-    if type(settings.v) ~= 'nil' and settings.v >= tonumber(_addon.version) and settings.first_run == false then
-        return
-    end
-
-    --[[log('Hi '..get_player()['name']:lower()..',')
-    log('Thank you for using plasmon v'.._addon.version)
-    log('In this update I\'ve added a function to enable/disable the fracture timer for people who don\'t like to feel under pressure. :D')
-    log('- zohno@phoenix')]]
-
-    settings.v = _addon.version
-    settings.first_run = false
-    settings:save('all')
-end
-
 function initialize()
-    settings = config.load(defaults)
-
     local background = settings.colors.background
 
-    tb_create(tb_name)
-    tb_set_location(tb_name, settings.position.x, settings.position.y)
-    tb_set_bg_color(tb_name, background.a, background.r, background.g, background.b)
-    tb_set_color(tb_name, settings.font.a, 147, 161, 161)
-    tb_set_font(tb_name, settings.font.family, settings.font.size)
-    tb_set_bold(tb_name, settings.font.bold)
-    tb_set_italic(tb_name, settings.font.italic)
-    tb_set_text(tb_name, '')
-    tb_set_bg_visibility(tb_name, true)
+    windower.text.create(tb_name)
+    windower.text.set_location(tb_name, settings.position.x, settings.position.y)
+    windower.text.set_bg_color(tb_name, background.a, background.r, background.g, background.b)
+    windower.text.set_color(tb_name, settings.font.a, 147, 161, 161)
+    windower.text.set_font(tb_name, settings.font.family)
+    windower.text.set_font_size(tb_name, settings.font.size)
+    windower.text.set_bold(tb_name, settings.font.bold)
+    windower.text.set_italic(tb_name, settings.font.italic)
+    windower.text.set_text(tb_name, '')
+    windower.text.set_bg_visibility(tb_name, true)
 
-    if get_ffxi_info().zone_id == 271 then
+    if windower.ffxi.get_info().zone == 271 or windower.ffxi.get_info().zone == 264 then
         recovery_mode = true
     end
 end
 
 function dispose()
-    tb_delete(tb_name)
-    send_command('timers delete Delve')
+    windower.text.delete(tb_name)
+    windower.send_command('timers delete Delve')
 end
 
 -- windower events
 
-function event_load()
-    if _addon.commands then
-        send_command('alias '.._addon.commands..' lua c '.._addon.name)
-    end
+windower.register_event('load', initialize:cond(function() return windower.ffxi.get_info().logged_in end))
 
-    if get_ffxi_info()['logged_in'] then
-        initialize()
-    end
-end
+windower.register_event('login', initialize)
 
-function event_unload()
-    dispose()
+windower.register_event('logout', 'unload', dispose)
 
-    send_command('unalias plasmon')
-end
+windower.register_event('zone change', stop_tracking:cond(function(_,id) return (id == 271 or id == 264) and track end))
 
-function event_login()
-    initialize()
-    first_run()
-end
-
-function event_logout()
-    dispose()
-end
-
-function event_zone_change(from_id, from, to_id, to)
-    if from_id == 271 and track then
-        stop_tracking()
-    end
-end
-
-function event_incoming_text(original, modified, mode)
+windower.register_event('incoming text', function(original, modified, mode)
     local match
 
     original = original:strip_format()
@@ -348,7 +305,7 @@ function event_incoming_text(original, modified, mode)
                 stats.plasm     = stats.plasm + match
                 stats.tot_plasm = stats.tot_plasm + match
 
-                if match ~= 50 and match % 500 ~= 0 and match % 750 ~= 0 and match % 10000 ~= 0 then
+                if match % 50 == 0 and match % 500 ~= 0 and match % 750 ~= 0 and match % 10000 ~= 0 then
                     mobs = match / 50
                 else
                     mobs = 1
@@ -411,9 +368,18 @@ function event_incoming_text(original, modified, mode)
                 return modified, mode
             end
         end
-    elseif mode == 148 or mode == 151 then
+    elseif mode > 20 then
+    --mode == 148 or mode == 151 then
+        --old zones
         match = original:match('Now permeating the mists surrounding the fracture%.')
+        if match then
+            start_tracking()
 
+            return modified, mode
+        end
+
+        --new zones
+        match = original:match('Now permeating the mists surrounding the obscured domain%.')
         if match then
             start_tracking()
 
@@ -422,31 +388,31 @@ function event_incoming_text(original, modified, mode)
     end
 
     return modified, mode
-end
+end)
 
-function event_addon_command(...)
+windower.register_event('addon command', function(...)
     local args = T({...})
 
     if args[1] == nil then
-        send_command('plasmon help')
+        windower.send_command('plasmon help')
         return
     end
 
     local cmd = args:remove(1):lower()
 
     if cmd == 'help' then
-        log(chat.chars.wsquare..' plasmon help -- shows the help text.')
-        log(chat.chars.wsquare..' plasmon test -- fills the chat log with some messages to show how the plugin will work.')
-        log(chat.chars.wsquare..' plasmon reset -- sets current gained plasm, monster kill count and dropped airlixirs to 0.')
-        log(chat.chars.wsquare..' plasmon full-reset --  sets both current and total gained plasm, monster kill count and dropped airlixirs to 0.')
-        log(chat.chars.wsquare..' plasmon show -- shows the tracking window.')
-        log(chat.chars.wsquare..' plasmon hide -- hides the tracking window.')
-        log(chat.chars.wsquare..' plasmon toggle -- toggles the tracking window\'s visibility.')
-        log(chat.chars.wsquare..' plasmon light [<enabled>] -- enables or disables light mode. When enabled, the addon will never show the window and just print a summary in the chat box at the end of the run. If the enabled parameter is not specified, the help text will be shown.')
-        log(chat.chars.wsquare..' plasmon timer [<enabled>] -- enables or disables the timer. When enabled, the addon will start a 45 minutes timer when entering a fracture. If the enabled parameter is not specified, the help text will be shown.')
-        log(chat.chars.wsquare..' plasmon position [[-h]|[-x <x>] [-y <y>]] -- sets the horizontal and vertical position of the window relative to the upper-left corner. If no parameter is specified, the help text will be shown.')
-        log(chat.chars.wsquare..' plasmon font [[-h]|[-f <font>] [-s <size>] [-a <alpha>] [-b [<bold>]] [-i [<italic>]]] -- sets the style of the font used in the window. If the no parameter is specified, the help text will be shown.')
-        log(chat.chars.wsquare..' plasmon color [[-h]|[-o <objects>] [-d] [-r <red>] [-g <green>] [-b <blue>] [-a <alpha>]] -- sets the colors of the various elements present in the addon\'s window. If no parameter is specified, the help text will be shown.')
+        log('    help -- shows the help text.')
+        log('    test -- fills the chat log with some messages to show how the plugin will work.')
+        log('    reset -- sets current gained plasm, monster kill count and dropped airlixirs to 0.')
+        log('    full-reset --  sets both current and total gained plasm, monster kill count and dropped airlixirs to 0.')
+        log('    show -- shows the tracking window.')
+        log('    hide -- hides the tracking window.')
+        log('    toggle -- toggles the tracking window\'s visibility.')
+        log('    light [<enabled>] -- enables or disables light mode. When enabled, the addon will never show the window and just print a summary in the chat box at the end of the run. If the enabled parameter is not specified, the help text will be shown.')
+        log('    timer [<enabled>] -- enables or disables the timer. When enabled, the addon will start a 45 minutes timer when entering a fracture. If the enabled parameter is not specified, the help text will be shown.')
+        log('    position [[-h]|[-x <x>] [-y <y>]] -- sets the horizontal and vertical position of the window relative to the upper-left corner. If no parameter is specified, the help text will be shown.')
+        log('    font [[-h]|[-f <font>] [-s <size>] [-a <alpha>] [-b [<bold>]] [-i [<italic>]]] -- sets the style of the font used in the window. If the no parameter is specified, the help text will be shown.')
+        log('    color [[-h]|[-o <objects>] [-d] [-r <red>] [-g <green>] [-b <blue>] [-a <alpha>]] -- sets the colors of the various elements present in the addon\'s window. If no parameter is specified, the help text will be shown.')
     elseif cmd == 'test' then
         test()
     elseif cmd == 'reset' then
@@ -464,7 +430,7 @@ function event_addon_command(...)
             log('Enables or disables light mode. When enabled, the addon will never show the window and just print a summary in the chat box at the end of the run. If the enabled parameter is not specified, the help text will be shown.')
             log('Usage: plasmon light <enabled>')
             log('Positional arguments:')
-            log(chat.chars.wsquare..' <enabled>    specifies the status of the light mode. "default", "false" or "0" mean disabled. "true" or "1" mean enabled.')
+            log('    <enabled>    specifies the status of the light mode. "default", "false" or "0" mean disabled. "true" or "1" mean enabled.')
         else
             local light
 
@@ -498,7 +464,7 @@ function event_addon_command(...)
             log('Enables or disables the timer. When enabled, the addon will start a 45 minutes timer when entering a fracture. If the enabled parameter is not specified, the help text will be shown.')
             log('Usage: plasmon timer <enabled>')
             log('Positional arguments:')
-            log(chat.chars.wsquare..' <enabled>    specifies the status of the timer. "false" or "0" mean disabled. "default", "true" or "1" mean enabled.')
+            log('    <enabled>    specifies the status of the timer. "false" or "0" mean disabled. "default", "true" or "1" mean enabled.')
         else
             local timer
 
@@ -535,9 +501,9 @@ function event_addon_command(...)
                 log('Sets the horizontal and vertical position of the window relative to the upper-left corner. If the no parameter is specified, the help text will be shown.')
                 log('Usage: plasmon position [[-h]|[-x <x>] [-y <y>]]')
                 log('Optional arguments:')
-                log(chat.chars.wsquare..' -h       shows the help text.')
-                log(chat.chars.wsquare..' -x <x>   specifies the horizontal position of the window.')
-                log(chat.chars.wsquare..' -y <y>   specifies the vertical position of the window.')
+                log('    -h       shows the help text.')
+                log('    -x <x>   specifies the horizontal position of the window.')
+                log('    -y <y>   specifies the vertical position of the window.')
             elseif options:length() > 0 then
                 local x = settings.position.x
                 local y = settings.position.y
@@ -578,7 +544,7 @@ function event_addon_command(...)
                 settings.position.x = x
                 settings.position.y = y
 
-                tb_set_location(tb_name, x, y)
+                windower.text.set_location(tb_name, x, y)
                 settings:save('all')
                 log('The window\'s position has been set.')
             end
@@ -587,12 +553,12 @@ function event_addon_command(...)
                 log('Sets the style of the font used in the window. If the no parameter is specified, the help text will be shown.')
                 log('Usage: plasmon font [[-h]|[-f <font>] [-s <size>] [-a <alpha>] [-b [<bold>]] [-i [<italic>]]]')
                 log('Optional arguments:')
-                log(chat.chars.wsquare..' -h               shows the help text.')
-                log(chat.chars.wsquare..' -f <font>        specifies the text\'s font.')
-                log(chat.chars.wsquare..' -s <size>        specifies the text\'s size.')
-                log(chat.chars.wsquare..' -a <alpha>       specifies the text\'s transparency. the value must be set between 0 (transparent) and 255 (opaque), inclusive.')
-                log(chat.chars.wsquare..' -b [<bold>]      specifies if the text should be rendered bold. "default", "false" or "0" mean disabled. "true", "1" or no value mean enabled.')
-                log(chat.chars.wsquare..' -i [<italic>]    specifies if the text should be rendered italic. "default", "false" or "0" mean disabled. "true", "1" or no value mean enabled.')
+                log('    -h               shows the help text.')
+                log('    -f <font>        specifies the text\'s font.')
+                log('    -s <size>        specifies the text\'s size.')
+                log('    -a <alpha>       specifies the text\'s transparency. the value must be set between 0 (transparent) and 255 (opaque), inclusive.')
+                log('    -b [<bold>]      specifies if the text should be rendered bold. "default", "false" or "0" mean disabled. "true", "1" or no value mean enabled.')
+                log('    -i [<italic>]    specifies if the text should be rendered italic. "default", "false" or "0" mean disabled. "true", "1" or no value mean enabled.')
             elseif options:length() > 0 then
                 local family = settings.font.family
                 local size   = settings.font.size
@@ -670,10 +636,10 @@ function event_addon_command(...)
                 settings.font.italic = italic
                 settings.font.a      = a
 
-                tb_set_color(tb_name, a, 147, 161, 161)
-                tb_set_font(tb_name, family, size)
-                tb_set_bold(tb_name, bold)
-                tb_set_italic(tb_name, italic)
+                windower.text.set_color(tb_name, a, 147, 161, 161)
+                windower.text.set_font(tb_name, family, size)
+                windower.text.set_bold(tb_name, bold)
+                windower.text.set_italic(tb_name, italic)
                 settings:save('all')
                 log('The font\'s style has been set.')
             end
@@ -688,13 +654,13 @@ function event_addon_command(...)
                 log('Sets the colors of the various elements present in the addon\'s window. If the no parameter is specified, the help text will be shown.')
                 log('Usage: plasmon color [[-h]|[-o <objects>] [-d] [-r <red>] [-g <green>] [-b <blue>] [-a <alpha>]]')
                 log('Optional arguments:')
-                log(chat.chars.wsquare..' -h             shows the help text.')
-                log(chat.chars.wsquare..' -o <objects>   specifies the item/s which will have its/their color changed. If this parameter is missing all the objects will be changed. The accepted values are: "'..validObjects:concat('", "')..'"')
-                log(chat.chars.wsquare..' -d             sets the red, green, blue and alpha values of the specified objects to their default values.')
-                log(chat.chars.wsquare..' -r <red>       specifies the intensity of the red color. The value must be set between 0 and 255, inclusive, where 0 is less intense and 255 is most intense.')
-                log(chat.chars.wsquare..' -g <green>     specifies the intensity of the greencolor. The value must be set between 0 and 255, inclusive, where 0 is less intense and 255 is most intense.')
-                log(chat.chars.wsquare..' -b <blue>      specifies the intensity of the blue color. The value must be set between 0 and 255, inclusive, where 0 is less intense and 255 is most intense.')
-                log(chat.chars.wsquare..' -a <alpha>     specifies the text\'s transparency. The value must be set between 0 (transparent) and 255 (opaque), inclusive.')
+                log('    -h             shows the help text.')
+                log('    -o <objects>   specifies the item/s which will have its/their color changed. If this parameter is missing all the objects will be changed. The accepted values are: "'..validObjects:concat('", "')..'"')
+                log('    -d             sets the red, green, blue and alpha values of the specified objects to their default values.')
+                log('    -r <red>       specifies the intensity of the red color. The value must be set between 0 and 255, inclusive, where 0 is less intense and 255 is most intense.')
+                log('    -g <green>     specifies the intensity of the greencolor. The value must be set between 0 and 255, inclusive, where 0 is less intense and 255 is most intense.')
+                log('    -b <blue>      specifies the intensity of the blue color. The value must be set between 0 and 255, inclusive, where 0 is less intense and 255 is most intense.')
+                log('    -a <alpha>     specifies the text\'s transparency. The value must be set between 0 (transparent) and 255 (opaque), inclusive.')
             elseif options:length() > 0 then
                 local r = -1
                 local g = -1
@@ -872,7 +838,7 @@ function event_addon_command(...)
                             settings.colors[indexes[1]].a = a
                         end
 
-                        tb_set_bg_color(
+                        windower.text.set_bg_color(
                             tb_name,
                             settings.colors[indexes[1]].a,
                             settings.colors[indexes[1]].r,
@@ -887,7 +853,7 @@ function event_addon_command(...)
                 log('The objects\' color has been set.')
             end
         else
-            send_command('plasmon help')
+            windower.send_command('plasmon help')
         end
     end
-end
+end)

@@ -1,5 +1,5 @@
-**Author:** Giuliano Riccio  
-**Version:** v 1.20130610
+**Author:** Giuliano Riccio
+**Version:** v 1.20140210
 
 # FindAll #
 
@@ -54,6 +54,17 @@ findall :omega
 ----
 
 ##Changelog##
+### v1.20140328 ###
+* **change**: Changed the inventory structure refresh rate using packets.
+* **add**: IPC usage to track changes across simultaneously active accounts.
+
+### v1.20140210 ###
+* **fix**: Fixed bug that occasionally deleted stored inventory structures.
+* **change**: Increased the inventory structure refresh rate using packets.
+
+### v1.20131008 ###
+* **add**: Added new case storage support.
+
 ### v1.20130610 ###
 * **add**: Added slips as searchable storages for the current character.
 * **add**: The search results will show the long name if the short one doesn't contain the inputted search terms.

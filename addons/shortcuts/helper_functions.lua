@@ -1,4 +1,4 @@
---Copyright (c) 2013, Byrthnoth
+--Copyright (c) 2014, Byrthnoth
 --All rights reserved.
 
 --Redistribution and use in source and binary forms, with or without
@@ -26,109 +26,57 @@
 
 
 -----------------------------------------------------------------------------------
---Name: parse_resources()
+--Name: find_san()
 --Args:
----- lines_file (table of strings) - Table loaded with readlines() from an opened file
+---- str (string) - string to be sanitized
 -----------------------------------------------------------------------------------
 --Returns:
----- Table of subtables indexed by their id (or index).
----- Subtables contain the child text nodes/attributes of each resources line.
-----
----- Child text nodes are given the key "english".
----- Attributes keyed by the attribute name, for example:
----- <a id="1500" a="1" b="5" c="10">15</a>
----- turns into:
----- completed_table[1500]['a']==1
----- completed_table[1500]['b']==5
----- completed_table[1500]['c']==10
----- completed_table[1500]['english']==15
-----
----- There is also currently a field blacklist (ignore_fields) for the sake of memory bloat.
+---- sanitized string
 -----------------------------------------------------------------------------------
-function parse_resources(lines_file)
-	local ignore_fields = S{'german','french','japanese','index','fr','frl','de','del','jp','jpl'}
-	local completed_table = {}
-	for i in ipairs(lines_file) do
-		local str = tostring(lines_file[i])
-		local g,h,typ,key = string.find(str,'<(%w+) id="(%d+)" ')
-		if typ == 's' then -- Packets and .dats refer to the spell index instead of ID
-			g,h,key = string.find(str,'index="(%d+)" ')
-		end
-		if key ~=nil then
-			completed_table[tonumber(key)]={}
-			local q = 1
-			while q <= str:len() do
-				local a,b,ind,val = string.find(str,'(%w+)="([^"]+)"',q)
-				if ind~=nil then
-					if not ignore_fields[ind] then
-						if val == "true" or val == "false" then
-							completed_table[tonumber(key)][ind] = str2bool(val)
-						else
-							completed_table[tonumber(key)][ind] = val:gsub('&quot;','\42'):gsub('&apos;','\39')
-						end
-					end
-					q = b+1
-				else
-					q = str:len()+1
-				end
-			end
-			local k,v,english = string.find(str,'>([^<]+)</') -- Look for a Child Text Node
-			if english~=nil then -- key it to 'english' if it exists
-				completed_table[tonumber(key)]['english']=english
-			end
-		end
+function find_san(str)
+	if #str == 0 then return str end
+	
+	str = bracket_closer(str,0x28,0x29)
+	str = bracket_closer(str,0x5B,0x5D)
+	
+	-- strip precentages
+	local hanging_percent,num = 0,num
+	while str:byte(#str-hanging_percent) == 37 do
+		hanging_percent = hanging_percent + 1
 	end
-
-	return completed_table
+	str = str:sub(1,#str-hanging_percent%2)
+	return str
 end
 
 -----------------------------------------------------------------------------------
---Name: str2bool()
+--Name: bracket_closer()
 --Args:
----- input (string) - Value that might be true or false
+---- str (string) - string to have its brackets closed
+---- opener (number) - opening character's ASCII code
+---- closer (number) - closing character's ASCII code
 -----------------------------------------------------------------------------------
 --Returns:
----- boolean or nil. Defaults to nil if input is not true or false.
+---- string with its opened brackets closed
 -----------------------------------------------------------------------------------
-function str2bool(input)
-	-- Used in the options_load() function
-	if input:lower() == 'true' then
-		return true
-	elseif input:lower() == 'false' then
-		return false
-	else
-		return nil
+function bracket_closer(str,opener,closer)
+	op,cl,opadd = 0,0,1
+	for i=1,#str do
+		local ch = str:byte(i)
+		if ch == opener then
+			op = op +1
+			opadd = i
+		elseif ch == closer then
+			cl = cl + 1
+		end
 	end
-end
-
------------------------------------------------------------------------------------
---Name: split()
---Args:
----- msg (string): message to be subdivided
----- match (string/char): marker for subdivision
------------------------------------------------------------------------------------
---Returns:
----- Table containing string(s)
------------------------------------------------------------------------------------
-function split(msg, match)
-	local length = msg:len()
-	local splitarr = T{}
-	local u = 1
-	while u <= length do
-		local nextanch = msg:find(match,u)
-		if nextanch ~= nil then
-			splitarr[#splitarr+1] = msg:sub(u,nextanch-1)
-			if nextanch~=length then
-				u = nextanch+match:len()
-			else
-				u = length+1
-			end
+	if op > cl then
+		if opadd ~= #str then
+			str = str..string.char(closer)
 		else
-			splitarr[#splitarr+1] = msg:sub(u,length)
-			u = length+1
-		end
+			str = str..str.char(0x7,closer)
+		end		-- Close captures
 	end
-	return splitarr
+	return str
 end
 
 -----------------------------------------------------------------------------------
@@ -137,26 +85,123 @@ end
 ---- name (string): Name to be slugged
 -----------------------------------------------------------------------------------
 --Returns:
----- string with a gsubbed version of name that converts numbers to Roman numerals
--------- removes non-letter/numbers, and forces it to lower case.
+---- string with a gsubbed version of name that removes non-alphanumeric characters,
+-------- forces the string to lower-case, and converts numbers to Roman numerals,
+-------- which are upper case.
 -----------------------------------------------------------------------------------
 function strip(name)
-	return name:gsub('4','iv'):gsub('9','ix'):gsub('0','p'):gsub('3','iii'):gsub('2','ii'):gsub('1','i'):gsub('8','viii'):gsub('7','vii'):gsub('6','vi'):gsub('5','v'):gsub('[^%a]',''):lower()
+	return name:gsub('[^%w]',''):lower():gsub('(%d+)',to_roman)
 end
 
+
 -----------------------------------------------------------------------------------
---Name: percent_strip()
+--Name: to_roman()
 --Args:
----- line (string): string to be checked for % signs and stripped
+---- num (string or number): Number to be converted from Arabic to Roman numerals.
 -----------------------------------------------------------------------------------
 --Returns:
----- line, without any trailing %s.
+---- roman numerals that represent the passed number.
+-------- This function returns ix for 9 instead of viiii. They are both valid, but
+-------- FFXI uses the ix nomenclature so we will use that.
 -----------------------------------------------------------------------------------
-function percent_strip(line)
-	local line_len = #line
-	while line:byte(line_len) == 37 do
-		line = line:sub(1,line_len-1)
-		line_len = line_len -1
+function to_roman(num)
+	if type(num) ~= 'number' then
+		num = tonumber(num)
+		if num == nil then
+			print('Debug to_roman')
+			return ''
+		end
 	end
-	return line
+	if num>4599 then return tostring(num) end
+	
+	local retstr = ''
+	
+	if num == 0 then return 'zilch' end
+	if num == 1 then return '' end
+	
+	while num > 0 do
+		if num >= 1000 then
+			num = num - 1000
+			retstr = retstr..'m'
+		elseif num >= 900 then
+			num = num - 900
+			retstr = retstr..'cm'
+		elseif num >= 500 then
+			num = num - 500
+			retstr = retstr..'d'
+		elseif num >= 400 then
+			num = num - 400
+			retstr = retstr..'cd'
+		elseif num  >= 100 then
+			num = num - 100
+			retstr = retstr..'c'
+		elseif num >= 90 then
+			num = num - 90
+			retstr = retstr..'xc'
+		elseif num >= 50 then
+			num = num - 50
+			retstr = retstr..'l'
+		elseif num >= 40 then
+			num = num - 40
+			retstr = retstr..'xl'
+		elseif num >= 10 then
+			num = num - 10
+			retstr = retstr..'x'
+		elseif num == 9 then
+			num = num - 9
+			retstr = retstr..'ix'
+		elseif num >= 5 then
+			num = num - 5
+			retstr = retstr..'v'
+		elseif num == 4 then
+			num = num - 4
+			retstr = retstr..'iv'
+		elseif num >= 1 then
+			num = num - 1
+			retstr = retstr..'i'
+		end
+	end
+	
+	return retstr
+end
+
+
+-----------------------------------------------------------------------------------
+--Name: check_usability()
+--Args:
+---- player (table): get_player() table
+---- resource (string): name of the resource to be examined
+---- id (num): ID of the spell/ability of interest
+-----------------------------------------------------------------------------------
+--Returns:
+---- boolean : true indicates that the spell/ability is known to you and false indicates that it is not.
+-----------------------------------------------------------------------------------
+function check_usability(player,resource,id)
+    if resource == 'spells' and ( (res.spells[id].levels[player.main_job_id] and res.spells[id].levels[player.main_job_id] <= player.main_job_level) or
+      (res.spells[id].levels[player.sub_job_id] and res.spells[id].levels[player.sub_job_id] <= player.sub_job_level) ) then -- Should check to see if you know the spell
+        return true
+    elseif L(windower.ffxi.get_abilities()[resource] or {}):contains(id) then
+        return true
+    elseif resource == 'monster_abilities' and player.main_job_id == 23 and (res.monstrosity[windower.ffxi.get_mjob_data().species].tp_moves[id] or 0) <= player.main_job_level then
+        return true
+    end
+end
+
+
+-----------------------------------------------------------------------------------
+--Name: debug_chat()
+--Args:
+---- str (string): string to be printed to the log
+-----------------------------------------------------------------------------------
+--Returns:
+---- None
+-----------------------------------------------------------------------------------
+function debug_chat(str)
+    if not debugging then return end
+    
+    if tostring(str) then
+        windower.add_to_chat(8,str)
+    else
+        error('Debug chat is not a string',2)
+    end
 end

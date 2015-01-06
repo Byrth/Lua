@@ -1,7 +1,7 @@
 --[[
-findAll v1.20130610
+findAll v1.20140904
 
-Copyright (c) 2013, Giuliano Riccio
+Copyright (c) 2013-2014, Giuliano Riccio
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -28,57 +28,59 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ]]
 
-require 'chat'
-require 'lists'
-require 'logger'
-require 'sets'
+_addon.name    = 'findAll'
+_addon.author  = 'Zohno'
+_addon.version = '1.20140904'
+_addon.command = 'findAll'
 
-_addon = {}
-_addon.name     = 'findAll'
-_addon.version  = '1.20130610'
-_addon.commands = 'findAll'
+require('chat')
+require('lists')
+require('logger')
+require('sets')
+require('tables')
+require('strings')
 
-json  = require 'json'
-file  = require 'filehelper'
-slips = require 'slips'
+json  = require('json')
+file  = require('files')
+slips = require('slips')
 
-load_timestamp         = os.time()
-deferral_time          = 20
+zone_search            = true
+first_pass             = true
+time_out_offset        = 0
+next_sequence_offset   = 0
 item_names             = T{}
-global_storages        = {}
+global_storages        = T{}
 storages_path          = 'data/storages.json'
-storages_order         = L{'temporary', 'inventory', 'safe', 'storage', 'locker', 'satchel', 'sack'}
-storage_slips_order    = L{'slip 01', 'slip 02', 'slip 03', 'slip 04', 'slip 05', 'slip 06', 'slip 07', 'slip 08', 'slip 09', 'slip 10', 'slip 11', 'slip 12', 'slip 13', 'slip 14'}
+storages_order         = L{'temporary', 'inventory', 'wardrobe', 'safe', 'storage', 'locker', 'satchel', 'sack', 'case'}
+storage_slips_order    = L{'slip 01', 'slip 02', 'slip 03', 'slip 04', 'slip 05', 'slip 06', 'slip 07', 'slip 08', 'slip 09', 'slip 10', 'slip 11', 'slip 12', 'slip 13', 'slip 14', 'slip 15', 'slip 16', 'slip 17', 'slip 18', 'slip 19'}
 merged_storages_orders = L{}:extend(storages_order):extend(storage_slips_order)
-resources              = {
-    ['armor']   = '../../plugins/resources/items_armor.xml',
-    ['weapons'] = '../../plugins/resources/items_weapons.xml',
-    ['general'] = '../../plugins/resources/items_general.xml'
-}
+resources              = require ('resources').items
 
 function search(query, export)
-    if global_storages ~= nil then
-        if not update() then
-            return
-        end
-    end
+    update()
 
     if query:length() == 0 then
         return
     end
 
-    local character_filters = S{}
+    local character_set    = S{}
+    local character_filter = S{}
     local terms            = ''
 
     for _, query_element in ipairs(query) do
-        if query_element:find('^:%a+$') then
-            character_filters:add(query_element:match('^:(%a+)$'):lower():gsub("^%l", string.upper))
+        local char = query_element:match('^([:!]%a+)$')
+        if char then
+            if char:sub(1, 1) == '!' then
+                character_filter:add(char:sub(2):lower():gsub("^%l", string.upper))
+            else
+                character_set:add(char:sub(2):lower():gsub("^%l", string.upper))
+            end
         else
             terms = query_element
         end
     end
 
-    if character_filters:length() == 0 and terms == '' then
+    if character_set:length() == 0 and terms == '' then
         return
     end
 
@@ -98,38 +100,13 @@ function search(query, export)
         end
     end
 
-    if new_item_ids:length() > 0 then
-        for kind, resource_path in pairs(resources) do
-            resource = io.open(lua_base_path..resource_path, 'r')
-
-            if resource ~= nil then
-                while true do
-                    local line = resource:read()
-
-                    if line == nil then
-                        break
-                    end
-
-                    local id, long_name, name = line:match('id="(%d+)" enl="([^"]+)".+>([^<]+)<')
-
-                    if id ~= nil then
-                        id = tostring(id)
-
-                        if item_names[id] == nil
-                            and new_item_ids:contains(id)
-                        then
-                            item_names[id] = {
-                                ['name']      = name:gsub('♂', string.char(0x81, 0x89)):gsub('♀', string.char(0x81, 0x8A)),
-                                ['long_name'] = long_name:gsub('♂', string.char(0x81, 0x89)):gsub('♀', string.char(0x81, 0x8A))
-                            }
-                        end
-                    end
-                end
-            else
-                error(kind..' resource file not found.')
-            end
-
-            resource:close()
+    for i,_ in pairs(new_item_ids) do
+        local id = tonumber(i)
+	    if (resources[id]) then
+            item_names[i] = {
+                ['name'] = resources[id].name,
+                ['long_name'] = resources[id].name_log
+            }
         end
     end
 
@@ -149,18 +126,20 @@ function search(query, export)
     end
 
     log('Searching: '..query:concat(' '))
-
+    
     local no_results   = true
     local sorted_names = global_storages:keyset():sort()
                                                  :reverse()
 
-    sorted_names = sorted_names:append(sorted_names:remove(sorted_names:find(get_player().name)))
+    if windower.ffxi.get_info().logged_in then
+        sorted_names = sorted_names:append(sorted_names:remove(sorted_names:find(windower.ffxi.get_player().name)))
                                :reverse()
+    end
 
     local export_file
 
     if export ~= nil then
-        export_file = io.open(lua_base_path..'data/'..export, 'w')
+        export_file = io.open(windower.addon_path..'data/'..export, 'w')
 
         if export_file == nil then
             error('The file "'..export..'" cannot be created.')
@@ -169,8 +148,10 @@ function search(query, export)
         end
     end
 
+    local total_quantity = 0
+
     for _, character_name in ipairs(sorted_names) do
-        if character_filters:length() == 0 or character_filters:length() > 0 and character_filters:contains(character_name) then
+        if (character_set:length() == 0 or character_set:contains(character_name)) and not character_filter:contains(character_name) then
             local storages = global_storages[character_name]
 
             for _, storage_name in ipairs(merged_storages_orders) do
@@ -180,6 +161,7 @@ function search(query, export)
                     for id, quantity in pairs(storages[storage_name]) do
                         if results_items:contains(id) then
                             if terms_pattern ~= '' then
+                                total_quantity = total_quantity + quantity
                                 results:append(
                                     (character_name..'/'..storage_name..':'):color(259)..' '..
                                     item_names[id].name:gsub('('..terms_pattern..')', ('%1'):color(258))..
@@ -203,12 +185,16 @@ function search(query, export)
 
                     results:sort()
 
-                    for _, result in ipairs(results) do
-                        add_to_chat(55, result)
+                    for i, result in ipairs(results) do
+                        log(result)
                     end
                 end
             end
         end
+    end
+
+    if total_quantity > 0 then
+        log('Total: ' .. total_quantity)
     end
 
     if export_file ~= nil then
@@ -218,7 +204,7 @@ function search(query, export)
 
     if no_results then
         if terms ~= '' then
-            if character_filters:length() == 0 then
+            if character_set:length() == 0 and character_filter:length() == 0 then
                 log('You have no items that match \''..terms..'\'.')
             else
                 log('You have no items that match \''..terms..'\' on the specified characters.')
@@ -227,13 +213,15 @@ function search(query, export)
             log('You have no items on the specified characters.')
         end
     end
-
-    collectgarbage()
 end
 
 function get_storages()
-    local items    = get_items()
+    local items    = windower.ffxi.get_items()
     local storages = {}
+
+    if not items then
+        return false
+    end
 
     storages.gil = items.gil
 
@@ -241,13 +229,15 @@ function get_storages()
         storages[storage_name] = T{}
 
         for _, data in ipairs(items[storage_name]) do
-            local id = tostring(data.id)
+            if type(data) == 'table' then
+                local id = tostring(data.id)
 
-            if id ~= "0" then
-                if storages[storage_name][id] == nil then
-                    storages[storage_name][id] = data.count
-                else
-                    storages[storage_name][id] = storages[storage_name][id] + data.count
+                if id ~= "0" then
+                    if storages[storage_name][id] == nil then
+                        storages[storage_name][id] = data.count
+                    else
+                        storages[storage_name][id] = storages[storage_name][id] + data.count
+                    end
                 end
             end
         end
@@ -268,19 +258,17 @@ function get_storages()
 end
 
 function update()
-    if not get_ffxi_info().logged_in then
-        write('you have to be logged in to use this addon')
-    end
-
-    local time_difference = os.time() - load_timestamp
-
-    if time_difference < deferral_time then
-        notice('findAll will be available in '..(deferral_time - time_difference)..' seconds.')
-
+    if not windower.ffxi.get_info().logged_in then
+        print('You have to be logged in to use this addon.')
         return false
     end
 
-    local player_name   = get_player().name
+    if zone_search == false then
+        notice('findAll has not detected a fully loaded inventory yet.')
+        return false
+	end
+
+    local player_name   = windower.ffxi.get_player().name
     local storages_file = file.new(storages_path)
 
     if not storages_file:exists() then
@@ -290,10 +278,16 @@ function update()
     global_storages = json.read(storages_file)
 
     if global_storages == nil then
-        global_storages = {}
+        global_storages = T{}
     end
+	
+	local temp_storages = get_storages()
 
-    global_storages[player_name] = get_storages()
+	if temp_storages then
+		global_storages[player_name] = temp_storages
+	else
+		return false
+	end
 
     -- build json string
     local characters_json = L{}
@@ -304,7 +298,7 @@ function update()
         for storage_name, storage in pairs(storages) do
             if storage_name == 'gil' then
                 storages_json:append('"'..storage_name..'":'..storage)
-            elseif storage_name ~= 'temporary' and not storage_name:match('^slip') then
+            elseif storage_name ~= 'temporary' then
                 local items_json = L{}
 
                 for id, quantity in pairs(storage) do
@@ -318,71 +312,95 @@ function update()
         characters_json:append('"'..character_name..'":{'..storages_json:concat(',')..'}')
     end
 
-    storages_file:write('{'..characters_json:concat(',')..'}')
+    storages_file:write('{'..characters_json:concat(',\n')..'}')
 
     collectgarbage()
 
     return true
 end
 
-function event_load()
-    send_command('alias findall lua c findall')
+windower.register_event('load', update:cond(function() return windower.ffxi.get_info().logged_in end))
 
-    if get_ffxi_info().logged_in then
+windower.register_event('incoming chunk', function(id,original,modified,injected,blocked)
+    local seq = original:byte(4)*256+original:byte(3)
+	if (next_sequence and seq + next_sequence_offset >= next_sequence) or (time_out and seq + time_out_offset >= time_out) then
+        zone_search = true
+		update()
+		next_sequence = nil
+        time_out = nil
+        sequence_offset = 0
+	end
+	
+	if id == 0x00A then -- First packet of a new zone
+		zone_search = false
+        time_out = seq+33
+        if time_out < time_out%0x100 then
+            time_out_offset = 256
+        end
+        
+--	elseif id == 0x01D then
+	-- This packet indicates that the temporary item structure should be copied over to
+	-- the real item structure, accessed with get_items(). Thus we wait one packet and
+	-- then trigger an update.
+--        zone_search = true
+--		next_sequence = seq+128
+--        if next_sequence < next_sequence%0x100 then
+--            next_sequence_offset = 256
+--        end
+    elseif (id == 0x1E or id == 0x1F or id == 0x20) and zone_search then
+    -- Inventory Finished packets aren't sent for trades and such, so this is more
+    -- of a catch-all approach. There is a subtantial delay to avoid spam writing.
+        next_sequence = seq+128
+        if next_sequence < next_sequence%0x100 then
+            next_sequence_offset = 256
+        end
+	end
+end)
+
+windower.register_event('ipc message', function(str)
+    if str == 'findAll update' then
         update()
     end
-end
+end)
 
-function event_unload()
-    send_command('unalias findall')
+windower.register_event('addon command', function(...)
+    if first_pass then
+        first_pass = false
+        windower.send_ipc_message('findAll update')
+        windower.send_command('wait 0.05;findall '..table.concat({...},' '))
+    else
+        first_pass = true
+        local params = L{...}
+        local query  = L{}
+        local export = nil
 
-    if get_ffxi_info().logged_in then
-        if not update() then
-            error('findAll wasn\'t ready.')
+        -- convert command line params (SJIS) to UTF-8
+        for i, elm in ipairs(params) do
+            params[i] = windower.from_shift_jis(elm)
         end
-    end
-end
 
-function event_login()
-    load_timestamp = os.time();
-end
+        while params:length() > 0 and params[1]:match('^[:!]%a+$') do
+            query:append(params:remove(1))
+        end
 
-function event_zone_change()
-    load_timestamp = os.time();
-end
+        if params:length() > 0 then
+            export = params[params:length()]:match('^--export=(.+)$') or params[params:length()]:match('^-e(.+)$')
 
-function event_logout()
-    if not update() then
-        error('findAll wasn\'t ready.')
-    end
-end
+            if export ~= nil then
+                export = export:gsub('%.csv$', '')..'.csv'
 
-function event_addon_command(...)
-    local params = L{...}
-    local query  = L{}
-    local export = nil
+                params:remove(params:length())
 
-    while params:length() > 0 and params[1]:match('^:%a+$') do
-        query:append(params:remove(1))
-    end
+                if export:match('['..('\\/:*?"<>|'):escape()..']') then
+                    export = nil
 
-    if params:length() > 0 then
-        export = params[params:length()]:match('^--export=(.+)$') or params[params:length()]:match('^-e(.+)$')
-
-        if export ~= nil then
-            export = export:gsub('%.csv$', '')..'.csv'
-
-            params:remove(params:length())
-
-            if export:match('['..('\\/:*?"<>|'):escape()..']') then
-                export = nil
-
-                error('The filename cannot contain any of the following characters: \\ / : * ? " < > |')
+                    error('The filename cannot contain any of the following characters: \\ / : * ? " < > |')
+                end
             end
+
+            query:append(params:concat(' '))
         end
-
-        query:append(params:concat(' '))
+        
+        search(query, export)
     end
-
-    search(query, export)
-end
+end)

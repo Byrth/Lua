@@ -26,16 +26,21 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ]]
 
-_addon = {}
-_addon.name = 'AEcho'
-_addon.version = '2.01'
 
-require 'tablehelper'
-require 'stringhelper'
-require 'logger'
-require 'sets'
-local config = require 'config'
-local defaults = T{}
+_addon.name = 'AEcho'
+_addon.version = '2.02'
+_addon.author = 'Nitrous (Shiva)'
+_addon.command = 'aecho'
+
+require('tables')
+require('strings')
+require('logger')
+require('sets')
+config = require('config')
+chat = require('chat')
+res = require('resources')
+
+defaults = {}
 defaults.buffs = S{	"light arts","addendum: white","penury","celerity","accession","perpetuance","rapture",
                     "dark arts","addendum: black","parsimony","alacrity","manifestation","ebullience","immanence",
                     "stun","petrified","silence","stun","sleep","slow","paralyze"
@@ -43,63 +48,49 @@ defaults.buffs = S{	"light arts","addendum: white","penury","celerity","accessio
 defaults.alttrack = true
 defaults.sitrack = true
 
+settings = config.load(defaults)
 
+autoecho = true
 
-function initialize()
-    settings = config.load(defaults)
-    settings:save()
-    autoecho = true
-end
-
-function event_load()
-    send_command('alias aecho lua c aecho')
-    if get_ffxi_info()['logged_in'] then
-        initialize()
-    end
-end
-
-function event_login()
-    initialize()
-end
-
-function event_unload()
-    send_command('unalias aecho')
-end
-
-function event_gain_status(id,name)
+windower.register_event('gain buff', function(id)
+    local name = res.buffs[id].english
     for key,val in pairs(settings.buffs) do
-        if key:lower() ==name:lower() then
+        if key:lower() == name:lower() then
             if name:lower() == 'silence' and autoecho then
-                send_command('input /item "Echo Drops" '..get_player()["name"])
+                windower.send_command('input /item "Echo Drops" '..windower.ffxi.get_player()["name"])
             end
             if settings.alttrack then
-                send_command('send @others atc '..get_player()["name"]..' - '..name)
+                windower.send_command('send @others atc '..windower.ffxi.get_player()["name"]..' - '..name)
             end
         end
     end
-end
+end)
 
-function event_incoming_text(old,new,color)
+windower.register_event('incoming text', function(old,new,color)
     if settings.sitrack then
         local sta,ea,txt = string.find(new,'The effect of ([%w]+) is about to wear off.')
         if sta ~= nil then 
-            send_command('@send @others atc '..get_player()['name']..' - '..txt..' wearing off.')
+            windower.send_command('@send @others atc '..windower.ffxi.get_player()['name']..' - '..txt..' wearing off.')
         end
     end
     return new,color
-end
-function event_addon_command(...)
+end)
+
+windower.register_event('addon command', function(...)
     local args = {...}
     if args[1] ~= nil then
         local comm = args[1]:lower()
         if comm == 'help' then
-            notice('You have access to the following commands:')
-            notice(' 1. aecho watch <buffname> --adds buffname to the tracker')
-            notice(' 2. aecho unwatch <buffname> --removes buffname from the tracker')
-            notice(' 3. aecho trackalt --Toggles alt buff/debuff messages on main (this requires send addon)')
-            notice(' 4. aecho sitrack --When sneak/invis begin wearing passes this message to your alts')
-            notice(' 5. aecho list --lists buffs being tracked')
-            notice(' 6. aecho toggle --Toggles off automatic echo drop usage (in case you need this off. does not remain off across loads.)')
+            local helptext = [[AEcho - Command List:
+ 1. aecho watch <buffname> --adds buffname to the tracker
+ 2. aecho unwatch <buffname> --removes buffname from the tracker
+ 3. aecho trackalt --Toggles alt buff/debuff messages on main (this requires send addon)
+ 4. aecho sitrack --When sneak/invis begin wearing passes this message to your alts
+ 5. aecho list --lists buffs being tracked
+ 6. aecho toggle --Toggles off automatic echo drop usage (in case you need this off. does not remain off across loads.)]]
+            for _, line in ipairs(helptext:split('\n')) do
+                windower.add_to_chat(207, line..chat.controls.reset)
+            end
         elseif S{'watch','trackalt','unwatch','sitrack'}:contains(comm) then
             local list = ''
             local spacer = ''
@@ -135,4 +126,4 @@ function event_addon_command(...)
             return
         end
     end
-end
+end)
