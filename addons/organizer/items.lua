@@ -233,7 +233,7 @@ function item_tab:free()
             local bag_name = ind_name..'_bag'
             local ind, bag = eq[ind_name],eq[bag_name]
             if self.index == ind and self._parent._info.bag_id == bag then
-                windower.packets.inject_outgoing(0x50,string.char(0x50,0x04,0,0,0,v.id,0,0))
+                windower.packets.inject_outgoing(0x50,string.char(0x50,0x04,0,0,self._parent._info.bag_id,v.id,0,0))
                 break
             end
         end
