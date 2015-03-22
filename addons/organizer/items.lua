@@ -48,18 +48,19 @@ function items:find(item)
     return false
 end
 
-function items:route(start_bag,start_ind,end_bag)
+function items:route(start_bag,start_ind,end_bag,count)
+    count = count or self[start_bag][start_ind].count
     local failure = false
     local initial_ind = start_ind
     if start_bag ~= 0 and self[0]._info.n < 80 then
-        start_ind = self[start_bag][start_ind]:move(0)
+        start_ind = self[start_bag][start_ind]:move(0,0x52,count)
     elseif start_bag ~= 0 and self[0]._info.n >= 80 then
         failure = true
         org_warning('Cannot move more than 80 items into inventory')
     end
         
     if start_ind and end_bag ~= 0 and self[end_bag]._info.n < 80 then
-        self[0][start_ind]:move(end_bag)
+        self[0][start_ind]:transfer(end_bag,count)
     elseif not start_ind then
         failure = true
         org_warning('Initial movement of the route failed. ('..tostring(start_bag)..' '..tostring(initial_ind)..' '..tostring(start_ind)..' '..tostring(end_bag)..')')
@@ -85,7 +86,7 @@ function bags:new(id,count,extdata,index)
     if index and table.with(self,'index',index) then org_warning('Cannot assign the same index twice') return end
     self._info.n = self._info.n + 1
     index = index or self:first_empty()
-    self[index] = setmetatable({_parent=self,id=id,count=count,extdata=extdata,index=index,annihilated = false,
+    self[index] = setmetatable({_parent=self,id=id,count=count,extdata=extdata,index=index,
         name=res.items[id][_global.language]:lower(),log_name=res.items[id][_global.language..'_log']:lower()},
         {__index = function (t, k) 
             if not t or not k then print('table index is nil error',t,k) end
@@ -120,37 +121,89 @@ function bags:remove(index)
     rawset(self,index,nil)
 end
 
+function bags:find_all_instances(item,bool)
+    local instances = L{}
+    for i,v in self:it() do
+        if (bool or not v:annihilated()) and v.id == item.id then -- and v.count >= item.count then
+            if item.augments and v.augments and extdata.compare_augments(item.augments,v.augments) or not item.augments then
+                -- May have to do a higher level comparison here for extdata.
+                -- If someone exports an enchanted item when the timer is
+                -- counting down then this function will return false for it.
+                instances:append(i)
+            end
+        end
+    end
+    if instances.n ~= 0 then
+        return instances
+    else
+        return false
+    end
+end
+
 function bags:contains(item,bool)
     bool = bool or false -- Default to only looking at unannihilated items
-    for i,v in pairs(self) do
-        if (not v.annihilated or bool) and v.id == item.id and v.count >= item.count and v.extdata == item.extdata then
-            -- May have to do a higher level comparison here for extdata.
-            -- If someone exports an enchanted item when the timer is
-            -- counting down then this function will return false for it.
-            return i
+    local instances = self:find_all_instances(item,bool)
+    if instances then
+        return instances:it()()
+    end
+    return false
+end
+
+function bags:find_unfinished_stack(item,bool)
+    local tab = self:find_all_instances(item,bool)
+    if tab then
+        for i in tab:it() do
+            if res.items[self[i].id] and res.items[self[i].id].stack > self[i].count then
+                return i
+            end
         end
     end
     return false
 end
 
-function item_tab:move(dest_bag,count)
+function item_tab:transfer(dest_bag,count)
+    -- Transfer an item to a specific bag.
     if not dest_bag then org_warning('Destination bag is invalid.') return false end
     count = count or self.count
     local parent = self._parent
     local targ_inv = parent._parent[dest_bag]
-    if not self.annihilated and targ_inv._info.n < 80 and (targ_inv._info.bag_id == 0 or parent._info.bag_id == 0) then
+    if not (targ_inv._info.bag_id == 0 or parent._info.bag_id == 0) then
+        org_warning('Cannot move between two bags that are not inventory bags.')
+    else
+        while parent[self.index] and targ_inv:find_unfinished_stack(parent[self.index]) do
+            parent[self.index]:move(dest_bag,targ_inv:find_unfinished_stack(parent[self.index]),count)
+        end
+        if parent[self.index] then
+            parent[self.index]:move(dest_bag)
+        end
+        return true
+    end
+    return false
+end
+
+function item_tab:move(dest_bag,dest_slot,count)
+    if not dest_bag then org_warning('Destination bag is invalid.') return false end
+    count = count or self.count
+    local parent = self._parent
+    local targ_inv = parent._parent[dest_bag]
+    dest_slot = dest_slot or 0x52
+    
+    if not self:annihilated() and (not dest_slot or not targ_inv[dest_slot] or (targ_inv[dest_slot] and res.items[targ_inv[dest_slot].id].stack < targ_inv[dest_slot].count + count)) and (targ_inv._info.bag_id == 0 or parent._info.bag_id == 0) then
         item_tab:free()
-        windower.packets.inject_outgoing(0x29,string.char(0x29,6,0,0)..'I':pack(count)..string.char(parent._info.bag_id,dest_bag,self.index,0x52))
+        windower.packets.inject_outgoing(0x29,string.char(0x29,6,0,0)..'I':pack(count)..string.char(parent._info.bag_id,dest_bag,self.index,dest_slot))
+        org_warning('Moving item! ('..res.items[self.id].english..') from '..res.bags[parent._info.bag_id].en..' '..parent._info.n..' to '..res.bags[dest_bag].en..' '..targ_inv._info.n..')')
         local new_index = targ_inv:new(self.id, count, self.extdata)
-        print(parent._info.bag_id,dest_bag,self.index,new_index)
+        --print(parent._info.bag_id,dest_bag,self.index,new_index)
         parent:remove(self.index)
         return new_index
-    elseif targ_inv._info.n >= 80 then
-        org_warning('Cannot move the item. Target inventory is full ('..dest_bag..')')
+    elseif not dest_slot then
+        org_warning('Cannot move the item ('..res.items[self.id].english..'). Target inventory is full ('..res.bags[dest_bag].en..')')
+    elseif targ_inv[dest_slot] and res.items[targ_inv[dest_slot].id].stack < targ_inv[dest_slot].count + count then
+        org_warning('Cannot move the item ('..res.items[self.id].english..'). Target inventory slot would be overly full ('..(targ_inv[dest_slot].count + count)..' items in '..res.bags[dest_bag].en..')')
     elseif (targ_inv._info.bag_id ~= 0 and parent._info.bag_id ~= 0) then
-        org_warning('Cannot move the item. Attempting to move from a non-inventory to a non-inventory bag ('..parent._info.bag_id..' '..dest_bag..')')
-    elseif self.annihilated then
-        org_warning('Cannot move the item. It has already been annihilated.')
+        org_warning('Cannot move the item ('..res.items[self.id].english..'). Attempting to move from a non-inventory to a non-inventory bag ('..res.bags[parent._info.bag_id].en..' '..res.bags[dest_bag].en..')')
+    elseif self:annihilated() then
+        org_warning('Cannot move the item ('..res.items[self.id].english..'). It has already been annihilated.')
     end
     return false
 end
@@ -166,7 +219,7 @@ function item_tab:put_away(usable_bags)
         end
     end
     if bag_free then
-        self:move(bag_free,self.count)
+        self:transfer(bag_free,self.count)
     end
 end
 
@@ -186,8 +239,21 @@ function item_tab:free()
     return true
 end
 
-function item_tab:annihilate()
-    rawset(self,'annihilated',true)
+function item_tab:annihilate(count)
+    count = count or rawget(item_tab,'count')
+    local a_count = (rawget(item_tab,'a_count') or 0) + count
+    if a_count >count then
+        org_warning('Annihilating more of an item ('..item_tab.id..' : '..a_count..') than possible ('..count..'.')
+    end
+    rawset(self,'a_count',a_count)
+end
+
+function item_tab:annihilated()
+    return ( (rawget(self,'a_count') or 0) >= rawget(self,'count') )
+end
+
+function item_tab:available_amount()
+    return ( rawget(self,'count') - (rawget(self,'a_count') or 0) )
 end
 
 return Items
