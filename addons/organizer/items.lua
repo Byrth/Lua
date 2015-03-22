@@ -189,8 +189,7 @@ function item_tab:move(dest_bag,dest_slot,count)
     local targ_inv = parent._parent[dest_bag]
     dest_slot = dest_slot or 0x52
     
-    if not self:annihilated() and (not dest_slot or not targ_inv[dest_slot] or (targ_inv[dest_slot] and res.items[targ_inv[dest_slot].id].stack < targ_inv[dest_slot].count + count)) and (targ_inv._info.bag_id == 0 or parent._info.bag_id == 0) then
-        self:free()
+    if not self:annihilated() and (not dest_slot or not targ_inv[dest_slot] or (targ_inv[dest_slot] and res.items[targ_inv[dest_slot].id].stack < targ_inv[dest_slot].count + count)) and (targ_inv._info.bag_id == 0 or parent._info.bag_id == 0) and self:free() then
         windower.packets.inject_outgoing(0x29,string.char(0x29,6,0,0)..'I':pack(count)..string.char(parent._info.bag_id,dest_bag,self.index,dest_slot))
         org_warning('Moving item! ('..res.items[self.id].english..') from '..res.bags[parent._info.bag_id].en..' '..parent._info.n..' to '..res.bags[dest_bag].en..' '..targ_inv._info.n..')')
         local new_index = targ_inv:new(self.id, count, self.extdata)
@@ -205,6 +204,8 @@ function item_tab:move(dest_bag,dest_slot,count)
         org_warning('Cannot move the item ('..res.items[self.id].english..'). Attempting to move from a non-inventory to a non-inventory bag ('..res.bags[parent._info.bag_id].en..' '..res.bags[dest_bag].en..')')
     elseif self:annihilated() then
         org_warning('Cannot move the item ('..res.items[self.id].english..'). It has already been annihilated.')
+    elseif not self:free() then
+        org_warning('Cannot free the item ('..res.items[self.id].english..'). It has an unaddressable item status ('..tostring(self.status)..').')
     end
     return false
 end
@@ -236,6 +237,8 @@ function item_tab:free()
                 break
             end
         end
+    elseif self.status ~= 0 then
+        return false
     end
     return true
 end
