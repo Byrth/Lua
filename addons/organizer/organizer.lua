@@ -70,7 +70,7 @@ _global = {
     language_log = 'english_log',
 }
 
-_default_settings = {
+default_settings = {
     dump_bags = {1,4,2},
     bag_priority = {1,4,2,5,6,7},
     item_delay = 0,
@@ -105,7 +105,7 @@ function options_load( )
         end
     end
 
-    settings = config.load(_default_settings)
+    settings = config.load(default_settings)
 end
 
 
@@ -234,7 +234,7 @@ function organize(goal_items)
     org_verbose('Start Organizing!')
     local current_items = Items.new()
     if current_items[0].n == 80 then
-        tidy(goal_items,current_items,_settings.dump_bags)
+        tidy(goal_items,current_items,settings.dump_bags)
     end
     if current_items[0].n == 80 then
         org_error('Unable to make space, aborting!')
@@ -246,7 +246,7 @@ function organize(goal_items)
         goal_items, current_items = get(goal_items,current_items)
         
         goal_items, current_items = clean_goal(goal_items,current_items)
-        goal_items, current_items = tidy(goal_items,current_items,_settings.dump_bags)
+        goal_items, current_items = tidy(goal_items,current_items,settings.dump_bags)
         remainder = incompletion_check(goal_items,remainder)
         org_verbose(tostring(remainder)..' '..current_items[0]._info.n,1)
     end
@@ -290,7 +290,7 @@ end
 function thaw(file_name,bag)
     local bags = _static.bag_ids[bag] and {[bag]=file_name} or table.reassign({},_static.bag_ids) -- One bag name or all of them if no bag is specified
     for i,v in pairs(_static.bag_ids) do
-        bags[i] = bags[i] and file_name or _settings.default_file
+        bags[i] = bags[i] and file_name or settings.default_file
     end
     bags.temporary = nil
     local inv_structure = {}

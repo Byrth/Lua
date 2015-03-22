@@ -25,7 +25,7 @@ function Items.new(loc_items,bool)
             local cur_inv = new_instance:new(bag_id)
             for inventory_index,item_table in pairs(loc_items[bag_id] or loc_items[bag_table.english:lower()]) do
                 if type(item_table) == 'table' and validate_id(item_table.id) then
-                    cur_inv:new(item_table.id,item_table.count,item_table.extdata,inventory_index)
+                    cur_inv:new(item_table.id,item_table.count,item_table.extdata,item_table.status,inventory_index)
                 end
             end
         end
@@ -81,12 +81,13 @@ function items:it()
     end
 end
 
-function bags:new(id,count,extdata,index)
+function bags:new(id,count,extdata,status,index)
     if self._info.n >= 80 then org_warning('Attempting to add another item to a bag with 80 items') return end
     if index and table.with(self,'index',index) then org_warning('Cannot assign the same index twice') return end
     self._info.n = self._info.n + 1
     index = index or self:first_empty()
-    self[index] = setmetatable({_parent=self,id=id,count=count,extdata=extdata,index=index,
+    status = status or 0
+    self[index] = setmetatable({_parent=self,id=id,count=count,extdata=extdata,index=index,status=status,
         name=res.items[id][_global.language]:lower(),log_name=res.items[id][_global.language..'_log']:lower()},
         {__index = function (t, k) 
             if not t or not k then print('table index is nil error',t,k) end
@@ -189,7 +190,7 @@ function item_tab:move(dest_bag,dest_slot,count)
     dest_slot = dest_slot or 0x52
     
     if not self:annihilated() and (not dest_slot or not targ_inv[dest_slot] or (targ_inv[dest_slot] and res.items[targ_inv[dest_slot].id].stack < targ_inv[dest_slot].count + count)) and (targ_inv._info.bag_id == 0 or parent._info.bag_id == 0) then
-        item_tab:free()
+        self:free()
         windower.packets.inject_outgoing(0x29,string.char(0x29,6,0,0)..'I':pack(count)..string.char(parent._info.bag_id,dest_bag,self.index,dest_slot))
         org_warning('Moving item! ('..res.items[self.id].english..') from '..res.bags[parent._info.bag_id].en..' '..parent._info.n..' to '..res.bags[dest_bag].en..' '..targ_inv._info.n..')')
         local new_index = targ_inv:new(self.id, count, self.extdata)
@@ -224,13 +225,13 @@ function item_tab:put_away(usable_bags)
 end
 
 function item_tab:free()
-    if item_tab.status == 5 then
+    if self.status == 5 then
         local eq = windower.ffxi.get_items().equipment
         for _,v in pairs(res.slots) do
             local ind_name = v.english:lower():gsub(' ','_')
             local bag_name = ind_name..'_bag'
             local ind, bag = eq[ind_name],eq[bag_name]
-            if item_tab.index == ind and item_tab._parent._info.bag_id == bag then
+            if self.index == ind and self._parent._info.bag_id == bag then
                 windower.packets.inject_outgoing(0x50,string.char(0x50,0x04,0,0,0,v.id,0,0))
                 break
             end
