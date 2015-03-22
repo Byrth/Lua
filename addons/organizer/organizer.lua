@@ -33,49 +33,114 @@ logger = require 'logger'
 require 'tables'
 require 'lists'
 require 'functions'
+config = require 'config'
 
 _addon.name = 'Organizer'
 _addon.author = 'Byrth'
 _addon.version = 0.150218
 _addon.command = 'org'
 
-if not windower.dir_exists('data') then
-    windower.create_dir('data')
-end
+_static = {
+    bag_ids = {
+        inventory=0,
+        safe=1,
+        storage=2,
+        temporary=3,
+        locker=4,
+        satchel=5,
+        sack=6,
+        case=7,
+        wardrobe=8,
+    },
+    bag_commands = {
+        "dance3",
+        "bank",
+        "storage",
+        "sigh",
+        "locker",
+        "satchel",
+        "sack",
+        "case",
+        "wardrobe"
+    }
+}
 
 _global = {
     language = 'english',
     language_log = 'english_log',
-    }
+}
 
-_settings = {dump_bags = {1,4,2},
-             bag_priority = {1,4,2,5,6,7},
-             default_file = 'default.lua'
-             }
+_default_settings = {
+    dump_bags = {1,4,2},
+    bag_priority = {1,4,2,5,6,7},
+    item_delay = 0,
+    auto_heal = 0
+}
 
 _debugging = {
-        warnings = true, -- This mode gives warnings about impossible item movements.
-    }
+    warnings = true, -- This mode gives warnings about impossible item movements.
+}
+
+
+
+windower.register_event('load',function()
+    if debugging then windower.debug('load') end
+    options_load()
+end)
+
+function options_load( )
+    if not windower.dir_exists(windower.addon_path..'data\\') then
+        windower.create_dir(windower.addon_path..'data\\')
+        if not windower.dir_exists(windower.addon_path..'data\\') then
+            org_error("unable to create data directory!")
+        end
+    end
+
+    for bag_name, bag_id in pairs(_static.bag_ids) do
+        if not windower.dir_exists(windower.addon_path..'data\\'..bag_name) then
+            windower.create_dir(windower.addon_path..'data\\'..bag_name)
+            if not windower.dir_exists(windower.addon_path..'data\\'..bag_name) then
+                org_error("unable to create"..bag_name.."directory!")
+            end
+        end
+    end
+
+    settings = config.load(_default_settings)
+end
+
+
 
 windower.register_event('addon command',function(...)
     local inp = {...}
     -- get (g) = Take the passed file and move everything to its defined location.
-    -- tidy (t) = Take the passed file and move everything that isn't in it out if my active inventory.
+    -- tidy (t) = Take the passed file and move everything that isn't in it out of my active inventory.
     -- organize (o) = get followed by tidy.
     local command = table.remove(inp,1):lower()
+
     local bag
-    if inp[1] and (_static.bag_ids[inp[1]:lower()] or inp[1]:lower() == 'all') and #inp > 1 then
-        bag = table.remove(inp,1):lower()
+
+    if inp[0] and (_static.bag_ids[inp[0]:lower()] or inp[0]:lower() == 'all') then
+        bag = table.remove(inp,0):lower()
+    else
+        bag = 'all'
     end
+
     file_name = table.concat(inp,' ')
+    if string.length(file_name) == 0 then
+        file_name = default_file_name()
+    end
+
     if file_name:sub(-4) ~= '.lua' then
         file_name = file_name..'.lua'
     end
-    
-    if _static.valid_commands[command] then
-        --if not files.exists('data/'..file_name) then error('File not found.') end
-        _static.valid_commands[command](thaw(file_name,bag))
-    elseif command == 'freeze' and bag then
+
+
+    if (command == 'g' or command == 'get') and bag then
+        get(thaw(file_name, bag))
+    elseif (command == 't' or command == 'tidy') and bag then
+        tidy(thaw(file_name, bag))
+    elseif (command == 'f' or command == 'freeze') and bag then
+
         local items = Items.new(windower.ffxi.get_items(),true)
         items[3] = nil -- Don't export temporary items
         
@@ -86,17 +151,25 @@ windower.register_event('addon command',function(...)
                 freeze(file_name,res.bags[bag_id].english:lower(),items)
             end
         end
-        
+    elseif (command == 'o' or command == 'organize') and bag then
+        organize(thaw(file_name, bag))        
     elseif command == 'test' then
         windower.send_command('org freeze test;wait 2;org thaw test')
     elseif command == 'eval' then
         assert(loadstring(file_name))()
     end
+
+    if settings.auto_heal and settings.auto_heal > 0 then
+        windower.send_command('input /heal')
+    end
+
 end)
 
 function get(goal_items,current_items)
     org_verbose('Getting!')
     if goal_items then
+        count = 0
+        failed = 0
         current_items = current_items or Items.new()
         goal_items, current_items = clean_goal(goal_items,current_items)
         for bag_id,inv in goal_items:it() do -- Should really be using #res.bags +1 for this instead of 9
@@ -107,14 +180,19 @@ function get(goal_items,current_items)
                     if start_bag then
                         if not current_items:route(start_bag,start_ind,bag_id) then
                             org_warning('Unable to move item.')
+                            failed = failed + 1
+                        else
+                            count = count + 1
                         end
                     else
                         -- Need to adapt this for stacking items somehow.
                         org_warning(res.items[item.id].english..' not found')
                     end
+                    simulate_item_delay()
                 end
             end
         end
+        org_verbose("Got "..count.." item(s), and failed getting "..failed.." item(s)")
     end
     return goal_items, current_items
 end
@@ -129,13 +207,15 @@ function freeze(file_name,bag,items)
         lua_export:append({name = item_table.name,log_name=item_table.log_name,
             id=item_table.id,extdata=item_table.extdata:hex(),augments = augments,count=item_table.count})
     end
-    for i,v in pairs(lua_export[1]) do print(i,v) end
-    local export_file = files.new('/data/'..bag..'/'..file_name,true)
-    export_file:write('return '..lua_export:tovstring({'augments','log_name','name','id','count','extdata'}))
+    -- Make sure we have something in the bag at all
+    if lua_export[1] then
+        for i,v in pairs(lua_export[1]) do print(i,v) end
+        local export_file = files.new('/data/'..bag..'/'..file_name,true)
+        export_file:write('return '..lua_export:tovstring({'augments','log_name','name','id','count','extdata'}))
+    end
 end
 
 function tidy(goal_items,current_items,usable_bags)
-    org_verbose('Tidying!')
     -- Move everything out of items[0] and into other inventories (defined by the passed table)
     if goal_items and goal_items[0] and goal_items[0]._info.n > 0 then
         current_items = current_items or Items.new()
@@ -144,6 +224,7 @@ function tidy(goal_items,current_items,usable_bags)
             if not goal_items[0]:contains(item,true) then
                 current_items[0][index]:put_away(usable_bags)
             end
+            simulate_item_delay()
         end
     end
     return goal_items, current_items
@@ -251,25 +332,14 @@ function org_verbose(msg,col)
     windower.add_to_chat(col or 8,'Organizer: '..msg)
 end
 
+function default_file_name()
+    player = windower.ffxi.get_player()
+    job_name = res.jobs[player.main_job_id]['english_short']
+    return player.name..'_'..job_name..'.lua'
+end
 
-_static = {
-    valid_commands = {
-        get=get,
-        g=get,
-        tidy=tidy,
-        t=tidy,
-        organize=organize,
-        o=organize,
-        },
-    bag_ids = {
-        inventory=0,
-        safe=1,
-        storage=2,
-        temporary=3,
-        locker=4,
-        satchel=5,
-        sack=6,
-        case=7,
-        wardrobe=8,
-        },
-    }
+function simulate_item_delay()
+    if settings.item_delay and settings.item_delay > 0 then
+        coroutine.sleep(settings.item_delay)
+    end
+end
