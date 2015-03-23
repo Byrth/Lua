@@ -74,7 +74,8 @@ default_settings = {
     dump_bags = {1,4,2},
     bag_priority = {1,4,2,5,6,7,0,8},
     item_delay = 0,
-    auto_heal = 0
+    auto_heal = 0,
+    default_file='default.lua',
 }
 
 _debugging = {
@@ -149,8 +150,6 @@ windower.register_event('addon command',function(...)
         end
     elseif (command == 'o' or command == 'organize') and bag then
         organize(thaw(file_name, bag))        
-    elseif command == 'test' then
-        windower.send_command('org freeze test;wait 2;org thaw test')
     elseif command == 'eval' then
         assert(loadstring(file_name))()
     end
@@ -285,8 +284,11 @@ end
 
 function thaw(file_name,bag)
     local bags = _static.bag_ids[bag] and {[bag]=file_name} or table.reassign({},_static.bag_ids) -- One bag name or all of them if no bag is specified
+    if settings.default_file:sub(-4) ~= '.lua' then
+        settings.default_file = settings.default_file..'.lua'
+    end
     for i,v in pairs(_static.bag_ids) do
-        bags[i] = bags[i] and file_name or settings.default_file
+        bags[i] = bags[i] and file_name and windower.file_exists(windower.addon_path..'data/'..bags[i]..'/'..file_name) or settings.default_file
     end
     bags.temporary = nil
     local inv_structure = {}
