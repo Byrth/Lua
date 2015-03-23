@@ -74,9 +74,10 @@ end
 function items:it()
     local i = 0
     return function ()
-        while i < 9 do
+        while i < #settings.bag_priority do
             i = i + 1
-            if self[i%9] then return i%9, self[i%9] end
+            local id = settings.bag_priority[i]
+            if self[id] and validate_bag(res.bags[id]) then return id, self[id] end
         end
     end
 end

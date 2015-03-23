@@ -72,7 +72,7 @@ _global = {
 
 default_settings = {
     dump_bags = {1,4,2},
-    bag_priority = {1,4,2,5,6,7},
+    bag_priority = {1,4,2,5,6,7,0,8},
     item_delay = 0,
     auto_heal = 0
 }
