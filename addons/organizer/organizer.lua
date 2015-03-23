@@ -117,12 +117,9 @@ windower.register_event('addon command',function(...)
     -- organize (o) = get followed by tidy.
     local command = table.remove(inp,1):lower()
 
-    local bag
-
-    if inp[0] and (_static.bag_ids[inp[0]:lower()] or inp[0]:lower() == 'all') then
-        bag = table.remove(inp,0):lower()
-    else
-        bag = 'all'
+    local bag = 'all'
+    if inp[1] and (_static.bag_ids[inp[1]:lower()] or inp[1]:lower() == 'all') then
+        bag = table.remove(inp,1):lower()
     end
 
     file_name = table.concat(inp,' ')
@@ -143,7 +140,6 @@ windower.register_event('addon command',function(...)
 
         local items = Items.new(windower.ffxi.get_items(),true)
         items[3] = nil -- Don't export temporary items
-        
         if _static.bag_ids[bag] then
             freeze(file_name,bag,items)
         else
@@ -209,7 +205,7 @@ function freeze(file_name,bag,items)
     end
     -- Make sure we have something in the bag at all
     if lua_export[1] then
-        for i,v in pairs(lua_export[1]) do print(i,v) end
+        org_verbose("Freezing "..tostring(bag)..".")
         local export_file = files.new('/data/'..bag..'/'..file_name,true)
         export_file:write('return '..lua_export:tovstring({'augments','log_name','name','id','count','extdata'}))
     end
