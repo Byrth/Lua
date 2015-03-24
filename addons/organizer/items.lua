@@ -1,4 +1,28 @@
--- Items
+--Copyright (c) 2015, Byrthnoth and Rooks
+--All rights reserved.
+
+--Redistribution and use in source and binary forms, with or without
+--modification, are permitted provided that the following conditions are met:
+
+--    * Redistributions of source code must retain the above copyright
+--      notice, this list of conditions and the following disclaimer.
+--    * Redistributions in binary form must reproduce the above copyright
+--      notice, this list of conditions and the following disclaimer in the
+--      documentation and/or other materials provided with the distribution.
+--    * Neither the name of <addon name> nor the
+--      names of its contributors may be used to endorse or promote products
+--      derived from this software without specific prior written permission.
+
+--THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+--ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+--WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+--DISCLAIMED. IN NO EVENT SHALL <your name> BE LIABLE FOR ANY
+--DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+--(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+--LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+--ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+--(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+--SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 local Items = {}
 local items = {}
@@ -15,6 +39,10 @@ end
 
 local function validate_id(id)
     return (id and id ~= 0 and id ~= 0xFFFF) -- Not empty or gil
+end
+
+local function wardrobecheck(bag_id,id)
+    return bag_id~=8 or (bag_id == 8 and res.items[self.id] and (res.items[self.id].type == 4 or res.items[self.id].type == 5) )
 end
 
 function Items.new(loc_items,bool)
@@ -190,7 +218,11 @@ function item_tab:move(dest_bag,dest_slot,count)
     local targ_inv = parent._parent[dest_bag]
     dest_slot = dest_slot or 0x52
     
-    if not self:annihilated() and (not dest_slot or not targ_inv[dest_slot] or (targ_inv[dest_slot] and res.items[targ_inv[dest_slot].id].stack < targ_inv[dest_slot].count + count)) and (targ_inv._info.bag_id == 0 or parent._info.bag_id == 0) and self:free() then
+    if not self:annihilated() and
+        (not dest_slot or not targ_inv[dest_slot] or (targ_inv[dest_slot] and res.items[targ_inv[dest_slot].id].stack < targ_inv[dest_slot].count + count)) and
+        (targ_inv._info.bag_id == 0 or parent._info.bag_id == 0) and
+        wardrobecheck(targ_inv._info.bag_id,self.id) and
+        self:free() then
         windower.packets.inject_outgoing(0x29,string.char(0x29,6,0,0)..'I':pack(count)..string.char(parent._info.bag_id,dest_bag,self.index,dest_slot))
         org_warning('Moving item! ('..res.items[self.id].english..') from '..res.bags[parent._info.bag_id].en..' '..parent._info.n..' to '..res.bags[dest_bag].en..' '..targ_inv._info.n..')')
         local new_index = targ_inv:new(self.id, count, self.extdata)
@@ -205,6 +237,8 @@ function item_tab:move(dest_bag,dest_slot,count)
         org_warning('Cannot move the item ('..res.items[self.id].english..'). Attempting to move from a non-inventory to a non-inventory bag ('..res.bags[parent._info.bag_id].en..' '..res.bags[dest_bag].en..')')
     elseif self:annihilated() then
         org_warning('Cannot move the item ('..res.items[self.id].english..'). It has already been annihilated.')
+    elseif not wardrobecheck(targ_inv._info.bag_id,self.id) then
+        org_warning('Cannot move the item ('..res.items[self.id].english..') to the wardrobe. Wardrobe cannot hold an item of its type ('..tostring(res.items[self.id].type)..').')
     elseif not self:free() then
         org_warning('Cannot free the item ('..res.items[self.id].english..'). It has an unaddressable item status ('..tostring(self.status)..').')
     end
@@ -213,10 +247,10 @@ end
 
 function item_tab:put_away(usable_bags)
     local current_items = self._parent._parent
-    usable_bags = usable_bags or {1,4,2,5,6,7}
+    usable_bags = usable_bags or {1,4,2,5,6,7,8}
     local bag_free
     for _,v in ipairs(usable_bags) do
-        if current_items[v]._info.n < 80 then
+        if current_items[v]._info.n < 80 and wardrobecheck(v,self.id) then
             bag_free = v
             break
         end

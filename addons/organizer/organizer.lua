@@ -1,4 +1,4 @@
---Copyright (c) 2014, Byrthnoth
+--Copyright (c) 2015, Byrthnoth and Rooks
 --All rights reserved.
 
 --Redistribution and use in source and binary forms, with or without
@@ -37,7 +37,7 @@ config = require 'config'
 
 _addon.name = 'Organizer'
 _addon.author = 'Byrth, maintainer: Rooks'
-_addon.version = 0.150322
+_addon.version = 0.150324
 _addon.command = 'org'
 
 _static = {
@@ -167,7 +167,7 @@ function get(goal_items,current_items)
         failed = 0
         current_items = current_items or Items.new()
         goal_items, current_items = clean_goal(goal_items,current_items)
-        for bag_id,inv in goal_items:it() do -- Should really be using #res.bags +1 for this instead of 9
+        for bag_id,inv in goal_items:it() do
             for ind,item in inv:it() do
                 if not item:annihilated() then
                     local start_bag, start_ind = current_items:find(item)
@@ -288,7 +288,7 @@ function thaw(file_name,bag)
         settings.default_file = settings.default_file..'.lua'
     end
     for i,v in pairs(_static.bag_ids) do
-        bags[i] = bags[i] and file_name and windower.file_exists(windower.addon_path..'data/'..bags[i]..'/'..file_name) or settings.default_file
+        bags[i] = bags[i] and windower.file_exists(windower.addon_path..'data/'..i..'/'..file_name) and file_name or settings.default_file
     end
     bags.temporary = nil
     local inv_structure = {}
