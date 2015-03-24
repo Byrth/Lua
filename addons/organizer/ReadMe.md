@@ -2,7 +2,7 @@
 
 A multi-purpose inventory management solution. Similar to GearCollector; uses packets.
 
-For the purpose of this addon, a `bag` is: "safe", "storage", "locker", "satchel", "sack", "case", "wardrobe". 
+For the purpose of this addon, a `bag` is: "Safe", "Storage", "Locker", "Satchel", "Sack", "Case", "Wardrobe". 
 
 For commands that use a filename, if one is not specified, it defaults to Name_JOB.lua, e.g., Rooks_PLD.lua
 For commands that specify a bag, if one is not specified, it defaults to all, and will cycle through all of them.
@@ -14,49 +14,50 @@ This utility is still in development and there are at least a couple of known is
 ### Settings
 
 #### auto_heal
-Automatically /heal after getting/storing gear.
+Setting this feature to anything other than false will cause Organizer to use /heal after getting/storing gear.
 
 #### bag_priority
 The order that bags will be looked in for requested gear.
 
 #### dump_bags
-The order that bags will be used to move off unwanted gear, if not specified.
+The order that bags will be filled with unspecified gear from your inventory.
 
 #### item_delay
 A delay, in seconds, between item storage/retrieval. Defaults to 0 (no delay)
 
 
 ### Commands
+Commands below are written with their arguments indicated using square brackets, but you should not use square brackets when entering the commands in game. Default options are italicized.
 
 #### Freeze
 
 ```
-freeze [filename]
+freeze [bag] [filename]
 ```
 
-Freezes the current contents of all bags to `filename` in the respective data directory. This effectively takes a snapshot of your inventory for that job.
+Freezes the current contents of a `bag` or **all bags** to the specified `filename` or **Name_ShortJob.lua** in the respective data directory/directories. This effectively takes a snapshot of your inventory for that job. So using `//org freeze` as a Dancer named Pablo would result in freezing all of your bags in files named Pablo_DNC.lua.
 
 #### Get
 
 ```
-get [filename] [bag]
+get [bag] [filename]
 ```
 
-Attempts to move anything specified from `bag` to your current inventory, using `filename` as the basis.
+Thaws the frozen state specified by `filename` or **Name_ShortJob.lua** and `bag` or **all bags** and makes one attempt to move towards that state.
 
 
 #### Tidy
 
 ```
-tidy [filename] [bag]
+tidy [bag] [filename]
 ```
 
-A reverse of get - it moves out anything that is not specified.
+Thaws a frozen state specified by `filename` or **Name_ShortJob.lua** and `bag` or **all bags** and makes one attempt to purge anything currently in inventory that shouldn't be into dump bags.
 
 #### Organize
 
 ```
-organize [filename] [bag]
+organize [bag] [filename]
 ```
 
-A tidy and get in one operation. With no arguments, it will attempt to restore the entire snapshot in freeze.
+Thaws a frozen state specified by `filename` or **Name_ShortJob.lua** and `bag` or **all bags** and executes repeated Get and Tidy commands until a steady state is reached (aka. you have your gear). With no arguments, it will attempt to restore the entire thawed snapshot.
