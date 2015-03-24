@@ -31,7 +31,7 @@ A delay, in seconds, between item storage/retrieval. Defaults to 0 (no delay)
 #### Freeze
 
 ```
-freeze <filename>
+freeze [filename]
 ```
 
 Freezes the current contents of all bags to `filename` in the respective data directory. This effectively takes a snapshot of your inventory for that job.
@@ -39,16 +39,16 @@ Freezes the current contents of all bags to `filename` in the respective data di
 #### Get
 
 ```
-get <filename> <bag>
+get [filename] [bag]
 ```
 
-Attempts to move anything specified in <filename> for your inventoru, from <bag> to your current inventory
+Attempts to move anything specified from `bag` to your current inventory, using `filename` as the basis.
 
 
 #### Tidy
 
 ```
-tidy <filename> <bag>
+tidy [filename] [bag]
 ```
 
 A reverse of get - it moves out anything that is not specified.
@@ -56,7 +56,7 @@ A reverse of get - it moves out anything that is not specified.
 #### Organize
 
 ```
-organize <filename> <bag>
+organize [filename] [bag]
 ```
 
-A tidy and get in one operation. With no arguments, it will attempt to restore the snapshot in freeze.
+A tidy and get in one operation. With no arguments, it will attempt to restore the entire snapshot in freeze.
