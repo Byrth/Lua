@@ -25,7 +25,7 @@
 --SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 _addon.name = 'GearSwap'
-_addon.version = '0.899'
+_addon.version = '0.901'
 _addon.author = 'Byrth'
 _addon.commands = {'gs','gearswap'}
 
@@ -43,12 +43,17 @@ language = 'english'
 file = require 'files'
 require 'strings'
 require 'tables'
+require 'logger'
+-- Restore the normal error function (logger changes it)
+error = _raw.error
+
 require 'lists'
 require 'sets'
 
+
 windower.text.create = function (str)
     if __raw.text.registry[str] then
-        windower.add_to_chat(123,'GearSwap: Text object cannot be created because it already exists.')
+        msg.addon_msg(123,'Text object cannot be created because it already exists.')
     else
         __raw.text.registry[str] = true
         __raw.text.create(str)
@@ -79,7 +84,7 @@ end
 
 windower.prim.create = function (str)
     if __raw.prim.registry[str] then
-        windower.add_to_chat(123,'GearSwap: Primitive cannot be created because it already exists.')
+        msg.addon_msg(123,'Primitive cannot be created because it already exists.')
     else
         __raw.prim.registry[str] = true
         __raw.prim.create(str)
@@ -99,6 +104,7 @@ texts = require 'texts'
 require 'pack'
 bit = require 'bit'
 socket = require 'socket'
+mime = require 'mime'
 res = require 'resources'
 extdata = require 'extdata'
 require 'helper_functions'
@@ -144,49 +150,47 @@ windower.register_event('addon command',function (...)
     
     for i,v in pairs(splitup) do splitup[i] = windower.from_shift_jis(windower.convert_auto_trans(v)) end
 
-    local cmd = splitup[1]:lower()
+    local cmd = table.remove(splitup,1):lower()
     
     if cmd == 'c' then
         if gearswap_disabled then return end
-        if splitup[2] then
+        if splitup[1] then
             refresh_globals()
-            equip_sets('self_command',nil,_raw.table.concat(splitup,' ',2,#splitup))
+            equip_sets('self_command',nil,_raw.table.concat(splitup,' '))
         else
-            windower.add_to_chat(123,'GearSwap: No self command passed.')
+            msg.addon_msg(123,'No self command passed.')
         end
     elseif cmd == 'equip' then
         if gearswap_disabled then return end
-        local key_list = parse_set_to_keys(table.slice(splitup, 2))
+        local key_list = parse_set_to_keys(splitup)
         local set = get_set_from_keys(key_list)
         if set then
             refresh_globals()
             equip_sets('equip_command',nil,set)
         else
-            windower.add_to_chat(123,'GearSwap: Equip command cannot be completed. That set does not exist.')
+            msg.addon_msg(123,'Equip command cannot be completed. That set does not exist.')
         end
     elseif cmd == 'export' then
-        table.remove(splitup,1)
         export_set(splitup)
     elseif cmd == 'validate' then
         if user_env and user_env.sets then
             refresh_globals()
-            table.remove(splitup, 1)
             validate(splitup)
         else
-            windower.add_to_chat(123,'GearSwap: There is nothing to validate because there is no file loaded.')
+            msg.addon_msg(123,'There is nothing to validate because there is no file loaded.')
         end
     elseif cmd == 'l' or cmd == 'load' then
-        if splitup[2] then
-            local f_name = table.concat(splitup,' ',2)
+        if splitup[1] then
+            local f_name = table.concat(splitup,' ')
             if pathsearch({f_name}) then
                 refresh_globals()
                 command_registry = Command_Registry.new()
                 load_user_files(false,f_name)
             else
-                windower.add_to_chat(123,'GearSwap: File not found.')
+                msg.addon_msg(123,'File not found.')
             end
         else
-            windower.add_to_chat(123,'GearSwap: No file name was provided.')
+            msg.addon_msg(123,'No file name was provided.')
         end
     elseif cmd == 'enable' then
         disenable(splitup,command_enable,'enable',false)
@@ -204,27 +208,46 @@ windower.register_event('addon command',function (...)
         _settings.show_swaps = not _settings.show_swaps
         print('GearSwap: Show Swaps set to '..tostring(_settings.show_swaps)..'.')
     elseif _settings.debug_mode and strip(cmd) == 'eval' then
-        table.remove(splitup,1)
         assert(loadstring(table.concat(splitup,' ')))()
     else
-        print('GearSwap: Command not found')
+        local handled = false
+        if not gearswap_disabled then
+            for i,v in ipairs(unhandled_command_events) do
+                handled = equip_sets(v,nil,cmd,unpack(splitup))
+                if handled then break end
+            end
+        end
+        if not handled then
+            print('GearSwap: Command not found')
+        end
     end
 end)
 
 function disenable(tab,funct,functname,pol)
     local slot_name = ''
-    if tab[2] and tab[2]:lower()=='all' then
+    local ltab = L{}
+    for i,v in pairs(tab) do
+        ltab:append(v:gsub('[^%a_%d]',''):lower())
+    end
+    if ltab:contains('all') then
         funct('main','sub','range','ammo','head','neck','lear','rear','body','hands','lring','rring','back','waist','legs','feet')
         print('GearSwap: All slots '..functname..'d.')
-    elseif tab[2]  then
-        for i=2,#tab do
-            slot_name = tab[i]:gsub('[^%a_%d]',''):lower()
+    elseif ltab.n > 0  then
+        local found = L{}
+        local not_found = L{}
+        for slot_name in ltab:it() do
             if slot_map[slot_name] then
                 funct(slot_name)
-                print('GearSwap: '..slot_name..' slot '..functname..'d.')
+                found:append(slot_name)
             else
-                print('GearSwap: Unable to find slot '..tostring(tab[i])..'.')
+                not_found:append(slot_name)
             end
+        end
+        if found.n > 0 then
+            print('GearSwap: '..found:tostring()..' slot'..(found.n>1 and 's' or '')..' '..functname..'d.')
+        end
+        if not_found.n > 0 then
+            print('GearSwap: Unable to find slot'..(not_found.n>1 and 's' or '')..' '..not_found:tostring()..'.')
         end
     elseif gearswap_disabled ~= pol and not tab[2] then
         print('GearSwap: User file '..functname..'d')
@@ -278,6 +301,8 @@ windower.register_event('incoming chunk',function(id,data,modified,injected,bloc
         player.sub_job_id = data:byte(0xB8)
         player.vitals.max_hp = data:unpack('I',0xE9)
         player.vitals.max_mp = data:unpack('I',0xED)
+        player.max_hp = data:unpack('I',0xE9)
+        player.max_mp = data:unpack('I',0xED)
         update_job_names()
         
         world.zone_id = data:unpack('H',0x31)
@@ -291,7 +316,7 @@ windower.register_event('incoming chunk',function(id,data,modified,injected,bloc
                 break
             end
         end
-        world.weather_id = data:byte(0x69)
+        weather_update(data:byte(0x69))
         world.logged_in = true
         
         _ExtraData.world.in_mog_house = data:byte(0x81) == 1
@@ -303,7 +328,7 @@ windower.register_event('incoming chunk',function(id,data,modified,injected,bloc
         local oldstatus = pet.status
         local status_id = data:byte(32)
         -- Filter all statuses aside from Idle/Engaged/Dead/Engaged dead.
-        if status_id < 4 then
+        if status_id < 4 or status_id == 33 or status_id == 47 then
             local newstatus = copy_entry(res.statuses[status_id])
             if newstatus and newstatus[language] then
                 newstatus = newstatus[language]
@@ -327,7 +352,7 @@ windower.register_event('incoming chunk',function(id,data,modified,injected,bloc
                 not_sent_out_equip[slot_name] = nil
             end
             if encumbrance_table[slot_id] and not tf then
-                debug_mode_chat("Your "..slot_name.." slot is now unlocked.")
+                msg.debugging("Your "..slot_name.." slot is now unlocked.")
             end
             encumbrance_table[slot_id] = tf
         end
@@ -465,6 +490,8 @@ windower.register_event('incoming chunk',function(id,data,modified,injected,bloc
     elseif id == 0x061 then
         player.vitals.max_hp = data:unpack('I',5)
         player.vitals.max_mp = data:unpack('I',9)
+        player.max_hp = data:unpack('I',5)
+        player.max_mp = data:unpack('I',9)
         player.main_job_id = data:byte(13)
         player.main_job_level = data:byte(14)
         
@@ -489,12 +516,30 @@ windower.register_event('incoming chunk',function(id,data,modified,injected,bloc
                 player.skills[to_windower_api(current_skill.english)] = skill
             end
         end
-    elseif id == 0x0DF then
+    elseif id == 0x0DF and data:unpack('I',5) == player.id then
         player.vitals.hp = data:unpack('I',9)
         player.vitals.mp = data:unpack('I',13)
         player.vitals.tp = data:unpack('I',0x11)
         player.vitals.hpp = data:byte(0x17)
         player.vitals.mpp = data:byte(0x18)
+        
+        player.hp = data:unpack('I',9)
+        player.mp = data:unpack('I',13)
+        player.tp = data:unpack('I',0x11)
+        player.hpp = data:byte(0x17)
+        player.mpp = data:byte(0x18)
+    elseif id == 0x0E2 and data:unpack('I',5)==player.id then
+        player.vitals.hp = data:unpack('I',9)
+        player.vitals.mp = data:unpack('I',0xB)
+        player.vitals.tp = data:unpack('I',0x11)
+        player.vitals.hpp = data:byte(0x1E)
+        player.vitals.mpp = data:byte(0x1F)
+        
+        player.hp = data:unpack('I',9)
+        player.mp = data:unpack('I',0xB)
+        player.tp = data:unpack('I',0x11)
+        player.hpp = data:byte(0x1E)
+        player.mpp = data:byte(0x1F)
     elseif id == 0x117 then
         for i=0x49,0x85,4 do
             local arr = data:sub(i,i+3)
@@ -538,7 +583,7 @@ windower.register_event('gain buff',function(buff_id)
     end
     
     refresh_globals()
-    equip_sets('buff_change',nil,buff_name,true)
+    equip_sets('buff_change',nil,buff_name,true,copy_entry(res.buffs[buff_id]))
 end)
 
 windower.register_event('lose buff',function(buff_id)
@@ -549,7 +594,7 @@ windower.register_event('lose buff',function(buff_id)
     windower.debug('lose buff '..buff_name..' ('..tostring(buff_id)..')')
     if gearswap_disabled then return end
     refresh_globals()
-    equip_sets('buff_change',nil,buff_name,false)
+    equip_sets('buff_change',nil,buff_name,false,copy_entry(res.buffs[buff_id]))
 end)
 
 windower.register_event('login',function(name)

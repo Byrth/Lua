@@ -1,10 +1,17 @@
 -- Extdata lib first pass
 
-require 'strings'
-res = require 'resources'
+_libs = _libs or {}
+_libs.actions = true
+_libs.tables = _libs.tables or require 'tables'
+local res = require 'resources'
+_libs.strings = _libs.strings or require 'strings'
+_libs.functions = _libs.functions or require 'functions'
 require 'pack'
 
-local extdata = {}
+
+-- MASSIVE LOOKUP TABLES AND OTHER CONSTANTS
+
+local decode = {}
 
 potencies = {
         zeros = {[0]=0,[1]=0,[2]=0,[3]=0,[4]=0,[5]=0,[6]=0,[7]=0,[8]=0,[9]=0,[10]=0,[11]=0,[12]=0,[13]=0,[14]=0,[15]=0},
@@ -122,6 +129,8 @@ augment_values = {
         
         [0x04A] = {{stat="Cap. Point", offset=1,percent=true}},
         [0x04B] = {{stat="Cap. Point", offset=33,percent=true}},
+        [0x04C] = {{stat="DMG:", offset=33}},
+        [0x04D] = {{stat="Delay:", offset=33,multiplier=-1,percent=true}},
 
         
         -- Need to figure out how to handle this section. The Pet: prefix is only used once despite how many augments are used.
@@ -152,6 +161,7 @@ augment_values = {
         [0x078] = {{stat='Avatar: "Mag.Atk.Bns."', offset=1}},
         [0x079] = {{stat='Pet: Breath', offset=1}},
         [0x07A] = {{stat='Pet: TP Bonus', offset=1, multiplier=20}},
+        [0x07B] = {{stat='Pet: "Dbl. Atk."', offset=1}},
 
         [0x080] = {{stat="Pet:",offset = 0}},
         --[0x081: Accuracy +1 Ranged Acc. +0 | value + 1
@@ -189,6 +199,7 @@ augment_values = {
         [0x094] = {{stat='"Gilfinder"', offset=1}},
         
         [0x097] = {{stat='"Martial Arts"', offset=1}},
+        
         [0x099] = {{stat='"Shield Mastery"', offset=1}},
         
         [0x0B0] = {{stat='"Resist Sleep"', offset=1}},
@@ -214,6 +225,10 @@ augment_values = {
         [0x0D4] = {{stat='"Recycle"', offset=1}},
 
         [0x0D7] = {{stat='"Ninja tool expertise"', offset=1}},
+        
+        [0x0E9] = {{stat='"Blood Boon"', offset=1}},
+        
+        [0x0ED] = {{stat='"Occult Acumen"', offset=1}},
 
         [0x101] = {{stat="Hand-to-Hand skill ", offset=1}},
         [0x102] = {{stat="Dagger skill ", offset=1}},
@@ -305,7 +320,6 @@ augment_values = {
         [0x20B] = {{stat="INT", offset=1,multiplier=-1}},
         [0x20C] = {{stat="MND", offset=1,multiplier=-1}},
         [0x20D] = {{stat="CHR", offset=1,multiplier=-1}},
-        
         -- The below values aren't really right
         -- They need to be "Ceiling'd"
         [0x20E] = {{stat="STR", offset=1}, {stat="DEX", offset=1, multiplier=-0.5}, {stat="VIT", offset=1, multiplier=-0.5}},
@@ -332,7 +346,6 @@ augment_values = {
         [0x223] = {{stat="AGI", offset=1, multiplier=-0.5}, {stat="INT", offset=1, multiplier=-0.5}, {stat="CHR", offset=1}},
         [0x224] = {{stat="AGI", offset=1, multiplier=-0.5}, {stat="MND", offset=1, multiplier=-0.5}, {stat="CHR", offset=1}},
         [0x225] = {{stat="INT", offset=1, multiplier=-0.5}, {stat="MND", offset=1, multiplier=-0.5}, {stat="CHR", offset=1}},
-        
         [0x226] = {{stat="STR", offset=1}, {stat="DEX", offset=1}},
         [0x227] = {{stat="STR", offset=1}, {stat="VIT", offset=1}},
         [0x228] = {{stat="STR", offset=1}, {stat="AGI", offset=1}},
@@ -340,6 +353,9 @@ augment_values = {
         [0x22A] = {{stat="INT", offset=1}, {stat="MND", offset=1}},
         [0x22B] = {{stat="MND", offset=1}, {stat="CHR", offset=1}},
         [0x22C] = {{stat="INT", offset=1}, {stat="MND", offset=1}, {stat="CHR", offset=1}},
+        [0x22D] = {{stat="STR", offset=1}, {stat="CHR", offset=1}},
+        [0x22E] = {{stat="STR", offset=1}, {stat="INT", offset=1}},
+        [0x22F] = {{stat="STR", offset=1}, {stat="MND", offset=1}},
 
         [0x2E4] = {{stat="DMG:", offset=1}},
         [0x2E5] = {{stat="DMG:", offset=33}},
@@ -369,7 +385,6 @@ augment_values = {
         [0x2FD] = {{stat="Delay:", offset=33,multiplier=-1}},
         [0x2FE] = {{stat="Delay:", offset=65,multiplier=-1}},
         [0x2FF] = {{stat="Delay:", offset=97,multiplier=-1}},
-        
         [0x300] = {{stat="Fire resistance", offset=1}},
         [0x301] = {{stat="Ice resistance", offset=1}},
         [0x302] = {{stat="Wind resistance", offset=1}},
@@ -589,7 +604,6 @@ augment_values = {
         [0x4E2] = {{stat="Indi. eff. dur. ", offset=1}},
         
         [0x4F0] = {{stat="Meditate eff. dur. ", offset=1}},
-        
         
         [0x500] = {{stat='Enhances "Mighty Strikes" effect', offset=0,multiplier=0}},
         [0x501] = {{stat='Enhances "Hundred Fists" effect', offset=0,multiplier=0}},
@@ -997,113 +1011,297 @@ augment_values = {
     },
 }
 
+server_timestamp_offset = 1009792800
 
-function unpack_augment(sys,short)
-    if sys == 1 then
-        return short:byte(1) + short:byte(2)%8*256,  math.floor(short:byte(2)/8)
-    elseif sys == 2 then
-        return short:byte(1), short:byte(2)
-    elseif sys == 3 then
-        return short:byte(1) + short:byte(2)%8*256,  math.floor(short:byte(2)%128/8)
-    end
-end
-
-function string_augment(sys,id,val)
-    local augment
-    local augment_table = augment_values[sys][id]
-    if not augment_table then print('Augments Lib: ',sys,id)
-    elseif augment_table.Secondary_Handling then
-        -- This is handling for system 1's indices 0x390~0x392, which have their own static augment lookup table
-        augment_table = sp_390_augments[ (id-0x390)*16 + 545 + val]
-    end
-    if augment_table then
-        if sys == 3 then
-            augment = augment_table[1].stat
-            local pot = augment_table[1].potency[val]
-            if pot > 0 then
-                augment = augment..'+'
-            end
-            augment = augment..pot
-        else
-            for i,v in pairs(augment_table) do
-                if i > 1 then augment = augment..' ' end
-                augment = (augment or '')..v.stat
-                local potency = ((val+v.offset)*(v.multiplier or 1))
-                if potency > 0 then augment = augment..'+'..potency
-                elseif potency < 0 then  augment = augment..potency end
-                if v.percent then
-                    augment = augment..'%'
-                end
-            end
-        end
-    else
-        augment = 'System: '..tostring(sys)..' ID: '..tostring(id)..' Val: '..tostring(val)
-    end
-    return augment
-end
-
-function augments_to_table(sys,str)
-    local augments,ids,vals = {},{},{}
-    for i=1,#str,2 do
-        local id,val = unpack_augment(sys,str:sub(i,i+1))
-        augments[#augments+1] = string_augment(sys,id,val)
-    end
-    return augments
-end
-
-
-local server_timestamp_offset = 1009792800
-
-local decode = {}
-
-function decode.Enchanted(str)
-    local rettab = {type = 'Enchanted Equipment',
-        charges_remaining = str:byte(2),
-        usable = str:byte(4)%128/64>=1,
-        next_use_time = str:unpack('I',5) + server_timestamp_offset,
-        activation_time = str:unpack('I',9) + server_timestamp_offset,
-        }
-    return rettab
-end
-
-function decode.Augmented(str)
-    local flag_2 = str:byte(2)
-    local rettab = {type = 'Augmented Equipment'}
-    if flag_2%128/64>= 1 then
-        rettab.trial_number = (str:byte(12)%128)*256+str:byte(11)
-        rettab.trial_complete = str:byte(12)/128>=1
-    end
+soul_plates = {
+    [0x001] = "Main Job: Warrior",
+    [0x002] = "Main Job: Monk",
+    [0x003] = "Main Job: White Mage",
+    [0x004] = "Main Job: Black Mage",
+    [0x005] = "Main Job: Red Mage",
+    [0x006] = "Main Job: Thief",
+    [0x007] = "Main Job: Paladin",
+    [0x008] = "Main Job: Dark Knight",
+    [0x009] = "Main Job: Beastmaster",
+    [0x00A] = "Main Job: Bard",
+    [0x00B] = "Main Job: Ranger",
+    [0x00C] = "Main Job: Samurai",
+    [0x00D] = "Main Job: Ninja",
+    [0x00E] = "Main Job: Dragoon",
+    [0x00F] = "Main Job: Summoner",
+    [0x010] = "Main Job: Blue Mage",
+    [0x011] = "Main Job: Corsair",
+    [0x012] = "Main Job: Puppetmaster",
     
-    if flag_2%64/32 >=1 then
-        rettab.augment_system = 2
-        local path_map = {[0] = 'A',[1] = 'B', [2] = 'C', [3] = 'D'}
-        local points_map = {[1] = 50, [2] = 80, [3] = 120, [4] = 170, [5] = 220, [6] = 280, [7] = 340, [8] = 410, [9] = 480, [10]=560, [11]=650, [12] = 750, [13] = 960, [14] = 980}
-        rettab.path = path_map[str:byte(3)%4]
-        rettab.rank = math.floor(str:byte(3)%128/4)
-        rettab.RP = math.max(points_map[rettab.rank] or 0 - str:byte(6)*256 - str:byte(5),0)
-        rettab.augments = augments_to_table(rettab.augment_system,str:sub(7,12))
-    elseif flag_2/128 >= 1 then -- Evolith
-        rettab.augment_system = 3
-        local slot_type_map = {[0] = 'None', [1] = 'Filled Upside-down Triangle', [2] = 'Filled Diamond', [3] = 'Filled Star', [4] = 'Empty Triangle', [5] = 'Empty Square', [6] = 'Empty Circle', [7] = 'Empty Upside-down Triangle', [8] = 'Empty Diamond', [9] = 'Empty Star', [10] = 'Filled Triangle', [11] = 'Filled Square', [12] = 'Filled Circle', [13] = 'Empty Circle', [14] = 'Fire', [15] = 'Ice'}
-        rettab.slots = {[1] = {type = slot_type_map[str:byte(9)%16], size = math.floor(str:byte(10)/16)+1, element = str:byte(12)%8},
-            [2] = {type = slot_type_map[math.floor(str:byte(9)/16)], size = str:byte(11)%16+1, element = math.floor(str:byte(12)/8)%8},
-            [3] = {type = slot_type_map[str:byte(10)%16], size = math.floor(str:byte(11)/16)+1, element = math.floor(str:byte(12)/64) + math.floor(str:byte(8)/128)},
-            }
-        rettab.augments = augments_to_table(rettab.augment_system,str:sub(3,8))
-    else
-        rettab.augment_system = 1
-        if rettab.trial_number then
-            rettab.augments = augments_to_table(rettab.augment_system,str:sub(3,10))
-        else
-            rettab.augments = augments_to_table(rettab.augment_system,str:sub(3,12))
-        end
-    end
-    return rettab
-end
+    [0x01F] = "Support Job: Warrior",
+    [0x020] = "Support Job: Monk",
+    [0x021] = "Support Job: White Mage",
+    [0x022] = "Support Job: Black Mage",
+    [0x023] = "Support Job: Red Mage",
+    [0x024] = "Support Job: Thief",
+    [0x025] = "Support Job: Paladin",
+    [0x026] = "Support Job: Dark Knight",
+    [0x027] = "Support Job: Beastmaster",
+    [0x028] = "Support Job: Bard",
+    [0x029] = "Support Job: Ranger",
+    [0x02A] = "Support Job: Samurai",
+    [0x02B] = "Support Job: Ninja",
+    [0x02C] = "Support Job: Dragoon",
+    [0x02D] = "Support Job: Summoner",
+    [0x02E] = "Support Job: Blue Mage",
+    [0x02F] = "Support Job: Corsair",
+    [0x030] = "Support Job: Puppetmaster",
+    
+    [0x03D] = "Job Ability: Warrior",
+    [0x03E] = "Job Ability: Monk",
+    [0x03F] = "Job Ability: White Mage",
+    [0x040] = "Job Ability: Black Mage",
+    [0x041] = "Job Ability: Red Mage",
+    [0x042] = "Job Ability: Thief",
+    [0x043] = "Job Ability: Paladin",
+    [0x044] = "Job Ability: Dark Knight",
+    [0x045] = "Job Ability: Beastmaster",
+    [0x046] = "Job Ability: Bard",
+    [0x047] = "Job Ability: Ranger",
+    [0x048] = "Job Ability: Samurai",
+    [0x049] = "Job Ability: Ninja",
+    [0x04A] = "Job Ability: Dragoon",
+    [0x04B] = "Job Ability: Summoner",
+    [0x04C] = "Job Ability: Blue Mage",
+    [0x04D] = "Job Ability: Corsair",
+    [0x04E] = "Job Ability: Puppetmaster",
+    
+    [0x05B] = "Job Trait: Warrior",
+    [0x05C] = "Job Trait: Monk",
+    [0x05D] = "Job Trait: White Mage",
+    [0x05E] = "Job Trait: Black Mage",
+    [0x05F] = "Job Trait: Red Mage",
+    [0x060] = "Job Trait: Thief",
+    [0x061] = "Job Trait: Paladin",
+    [0x062] = "Job Trait: Dark Knight",
+    [0x063] = "Job Trait: Beastmaster",
+    [0x064] = "Job Trait: Bard",
+    [0x065] = "Job Trait: Ranger",
+    [0x066] = "Job Trait: Samurai",
+    [0x067] = "Job Trait: Ninja",
+    [0x068] = "Job Trait: Dragoon",
+    [0x069] = "Job Trait: Summoner",
+    [0x06A] = "Job Trait: Blue Mage",
+    [0x06B] = "Job Trait: Corsair",
+    [0x06C] = "Job Trait: Puppetmaster",
+    
+    [0x079] = "White Magic Scrolls",
+    [0x07A] = "Black Magic Scrolls",
+    [0x07B] = "Bard Scrolls",
+    [0x07C] = "Ninjutsu Scrolls",
+    [0x07D] = "Avatar Scrolls",
+    [0x07E] = "Blue Magic Scrolls",
+    [0x07F] = "Corsair Dice",
+    
+    [0x08D] = "HP Max Bonus",
+    [0x08E] = "HP Max Bonus II",
+    [0x08F] = "HP Max +50",
+    [0x090] = "HP Max +100",
+    [0x091] = "MP Max Bonus",
+    [0x092] = "MP Max Bonus II",
+    [0x093] = "MP Max +50",
+    [0x094] = "MP Max +100",
+    [0x095] = "STR Bonus",
+    [0x096] = "STR Bonus II",
+    [0x097] = "STR +25",
+    [0x098] = "STR +50",
+    [0x099] = "VIT Bonus",
+    [0x09A] = "VIT Bonus II",
+    [0x09B] = "VIT +25",
+    [0x09C] = "VIT +50",
+    [0x09D] = "AGI Bonus",
+    [0x09E] = "AGI Bonus II",
+    [0x09F] = "AGI +25",
+    [0x0A0] = "AGI +50",
+    [0x0A1] = "DEX Bonus",
+    [0x0A2] = "DEX Bonus II",
+    [0x0A3] = "DEX +25",
+    [0x0A4] = "DEX +50",
+    [0x0A5] = "INT Bonus",
+    [0x0A6] = "INT Bonus II",
+    [0x0A7] = "INT +25",
+    [0x0A8] = "INT +50",
+    [0x0A9] = "MND Bonus",
+    [0x0AA] = "MND Bonus II",
+    [0x0AB] = "MND +25",
+    [0x0AC] = "MND +50",
+    [0x0AD] = "CHR Bonus",
+    [0x0AE] = "CHR Bonus II",
+    [0x0AF] = "CHR +25",
+    [0x0B0] = "CHR +50",
+    
+    [0x0C9] = "Monster Level Bonus",
+    [0x0CA] = "Monster Level Bonus II",
+    [0x0CB] = "Monster Level +2",
+    [0x0CC] = "Monster Level +4",
+    [0x0CD] = "Skill Level Bonus",
+    [0x0CE] = "Skill Level Bonus II",
+    [0x0CF] = "Skill Level +4",
+    [0x0D0] = "Skill Level +8",
+    [0x0D1] = "HP Max Rate Bonus",
+    [0x0D2] = "HP Max Rate Bonus II",
+    [0x0D3] = "HP Max +15%",
+    [0x0D4] = "HP Max +30%",
+    [0x0D5] = "MP Max Rate Bonus",
+    [0x0D6] = "MP Max Rate Bonus II",
+    [0x0D7] = "MP Max +15%",
+    [0x0D8] = "MP Max +30%",
+    [0x0D9] = "Attack Bonus",
+    [0x0DA] = "Attack Bonus II",
+    [0x0DB] = "Attack +15%",
+    [0x0DC] = "Attack +30%",
+    [0x0DD] = "Defense Bonus",
+    [0x0DE] = "Defense Bonus II",
+    [0x0DF] = "Defense +15%",
+    [0x0E0] = "Defense +30%",
+    [0x0E1] = "Magic Attack Bonus",
+    [0x0E2] = "Magic Attack Bonus II",
+    [0x0E3] = "Magic Attack +15%",
+    [0x0E4] = "Magic Attack +30%",
+    [0x0E5] = "Magic Defense Bonus",
+    [0x0E6] = "Magic Defense Bonus II",
+    [0x0E7] = "Magic Defense +15%",
+    [0x0E8] = "Magic Defense +30%",
+    [0x0E9] = "Accuracy Bonus",
+    [0x0EA] = "Accuracy Bonus II",
+    [0x0EB] = "Accuracy +15%",
+    [0x0EC] = "Accuracy +30%",
+    [0x0ED] = "Magic Accuracy Bonus",
+    [0x0EE] = "Magic Accuracy Bonus II",
+    [0x0EF] = "Magic Accuracy +15%",
+    [0x0F0] = "Magic Accuracy +30%",
+    [0x0F1] = "Evasion Bonus",
+    [0x0F2] = "Evasion Bonus II",
+    [0x0F3] = "Evasion +15%",
+    [0x0F4] = "Evasion +30%",
+    [0x0F5] = "Critical Hit Bonus",
+    [0x0F6] = "Critical Hit Bonus II",
+    [0x0F7] = "Critical Hit Rate +10%",
+    [0x0F8] = "Critical Hit Rate +20%",
+    [0x0F9] = "Interruption Rate Bonus",
+    [0x0FA] = "Interruption Rate Bonus II",
+    [0x0FB] = "Interruption Rate -25%",
+    [0x0FC] = "Interruption Rate -50%",
+    [0x0FD] = "Auto Regen",
+    [0x0FE] = "Auto Regen II",
+    [0x0FF] = "Auto Regen +5",
+    [0x100] = "Auto Regen +10",
+    [0x101] = "Auto Refresh",
+    [0x102] = "Auto Refresh II",
+    [0x103] = "Auto Refresh +5",
+    [0x104] = "Auto Refresh +10",
+    [0x105] = "Auto Regain",
+    [0x106] = "Auto Regain II",
+    [0x107] = "Auto Regain +3",
+    [0x108] = "Auto Regain +6",
+    [0x109] = "Store TP",
+    [0x10A] = "Store TP II",
+    [0x10B] = "Store TP +10%",
+    [0x10C] = "Store TP +20%",
+    [0x10D] = "Healing Magic Bonus",
+    [0x10E] = "Healing Magic Bonus II",
+    [0x10F] = "Healing Magic Skill +10%",
+    [0x110] = "Healing Magic Skill +20%",
+    [0x111] = "Divine Magic Bonus",
+    [0x112] = "Divine Magic Bonus II",
+    [0x113] = "Divine Magic Skill +10%",
+    [0x114] = "Divine Magic Skill +20%",
+    [0x115] = "Enhancing Magic Bonus",
+    [0x116] = "Enhancing Magic Bonus II",
+    [0x117] = "Enhancing Magic Skill +10%",
+    [0x118] = "Enhancing Magic Skill +20%",
+    [0x119] = "Enfeebling Magic Bonus",
+    [0x11A] = "Enfeebling Magic Bonus II",
+    [0x11B] = "Enfeebling Magic Skill +10%",
+    [0x11C] = "Enfeebling Magic Skill +20%",
+    [0x11D] = "Elemental Magic Bonus",
+    [0x11E] = "Elemental Magic Bonus II",
+    [0x11F] = "Elemental Magic Skill +10%",
+    [0x120] = "Elemental Magic Skill +20%",
+    [0x121] = "Dark Magic Bonus",
+    [0x122] = "Dark Magic Bonus II",
+    [0x123] = "Dark Magic Skill +10%",
+    [0x124] = "Dark Magic Skill +20%",
+    [0x125] = "Singing Bonus",
+    [0x126] = "Singing Bonus II",
+    [0x127] = "Singing Skill +10%",
+    [0x128] = "Singing Skill +20%",
+    [0x129] = "Ninjutsu Bonus",
+    [0x12A] = "Ninjutsu Bonus II",
+    [0x12B] = "Ninjutsu Skill +10%",
+    [0x12C] = "Ninjutsu Skill +20%",
+    [0x12D] = "Summoning Magic Bonus",
+    [0x12E] = "Summoning Magic Bonus II",
+    [0x12F] = "Summoning Magic Skill +10%",
+    [0x130] = "Summoning Magic Skill +20%",
+    [0x131] = "Blue Magic Bonus",
+    [0x132] = "Blue Magic Bonus II",
+    [0x133] = "Blue Magic Skill +10%",
+    [0x134] = "Blue Magic Skill +20%",
+    [0x135] = "Movement Speed Bonus",
+    [0x136] = "Movement Speed Bonus II",
+    [0x137] = "Movement Speed +5",
+    [0x138] = "Movement Speed +10",
+    [0x139] = "Attack Speed Bonus",
+    [0x13A] = "Attack Speed Bonus II",
+    [0x13B] = "Attack Speed +50",
+    [0x13C] = "Attack Speed +100",
+    [0x13D] = "Magic Frequency Bonus",
+    [0x13E] = "Magic Frequency Bonus II",
+    [0x13F] = "Magic Frequency +3",
+    [0x140] = "Magic Frequency +6",
+    [0x141] = "Ability Speed Bonus",
+    [0x142] = "Ability Speed Bonus II",
+    [0x143] = "Ability Speed +15%",
+    [0x144] = "Ability Speed +30%",
+    [0x145] = "Magic Casting Speed Bonus",
+    [0x146] = "Magic Casting Speed Bonus II",
+    [0x147] = "Magic Casting Speed +15%",
+    [0x148] = "Magic Casting Speed +30%",
+    [0x149] = "Ability Recast Speed Bonus",
+    [0x14A] = "Ability Recast Speed Bonus II",
+    [0x14B] = "Ability Recast Speed +15%",
+    [0x14C] = "Ability Recast Speed +30%",
+    [0x14D] = "Magic Recast Bonus",
+    [0x14E] = "Magic Recast Bonus II",
+    [0x14F] = "Magic Recast Speed +25%",
+    [0x150] = "Magic Recast Speed +50%",
+    [0x151] = "Ability Range Bonus",
+    [0x152] = "Ability Range Bonus II",
+    [0x153] = "Ability Range +2",
+    [0x154] = "Ability Range +4",
+    [0x155] = "Magic Range Bonus",
+    [0x156] = "Magic Range Bonus II",
+    [0x157] = "Magic Range +2",
+    [0x158] = "Magic Range +4",
+    [0x159] = "Ability Acquisition Bonus",
+    [0x15A] = "Ability Acquisition Bonus II",
+    [0x15B] = "Ability Acquisition Level -5",
+    [0x15C] = "Ability Acquisition Level -10",
+    [0x15D] = "Magic Acquisition Bonus",
+    [0x15E] = "Magic Acquisition Bonus II",
+    [0x15F] = "Magic Acquisition Level -5",
+    [0x160] = "Magic Acquisition Level -10", -- 00 B0 F8 03
+}
 
 
+
+
+
+
+-- TOOLS FOR HANDLING EXTDATA
+
+tools = {}
+tools.aug = {}
+
+tools.bit = {}
 -----------------------------------------------------------------------------------
---Name: l_to_r_bit_packed(dat_string,start,stop)
+--Name: tools.bit.l_to_r_bit_packed(dat_string,start,stop)
 --Args:
 ---- dat_string - string that is being bit-unpacked to a number
 ---- start - first bit
@@ -1112,7 +1310,7 @@ end
 --Returns:
 ---- number from the indicated range of bits 
 -----------------------------------------------------------------------------------
-function l_to_r_bit_packed(dat_string,start,stop)
+function tools.bit.l_to_r_bit_packed(dat_string,start,stop)
     local newval = 0
     
     local c_count = math.ceil(stop/8)
@@ -1144,7 +1342,17 @@ function l_to_r_bit_packed(dat_string,start,stop)
 end
 
 
-function decode.Signature(str)
+function tools.bit.bit_string(bits,str,map)
+    local i,sig = 0,''
+    while map[tools.bit.l_to_r_bit_packed(str,i,i+bits)] do
+        sig = sig..map[tools.bit.l_to_r_bit_packed(str,i,i+bits)]
+        i = i+bits
+    end
+    return sig
+end
+
+tools.sig = {}
+function tools.sig.decode(str)
     local sig_map = {[1]='0',[2]='1',[3]='2',[4]='3',[5]='4',[6]='5',[7]='6',[8]='7',[9]='8',[10]='9',
         [11]='A',[12]='B',[13]='C',[14]='D',[15]='E',[16]='F',[17]='G',[18]='H',[19]='I',[20]='J',[21]='K',[22]='L',[23]='M',
         [24]='N',[25]='O',[26]='P',[27]='Q',[28]='R',[29]='S',[30]='T',[31]='U',[32]='V',[33]='W',[34]='X',[35]='Y',[36]='Z',
@@ -1152,49 +1360,145 @@ function decode.Signature(str)
         [50]='n',[51]='o',[52]='p',[53]='q',[54]='r',[55]='s',[56]='t',[57]='u',[58]='v',[59]='w',[60]='x',[61]='y',[62]='z',
         [63]='{'
         }
-    return decode.bit_string(6,str,sig_map)
+    return tools.bit.bit_string(6,str,sig_map)
 end
 
-function decode.bit_string(bits,str,map)
-    local i,sig = 0,''
-    while map[l_to_r_bit_packed(str,i,i+bits)] do
-        sig = sig..map[l_to_r_bit_packed(str,i,i+bits)]
-        i = i+bits
+
+function tools.aug.unpack_augment(sys,short)
+    if sys == 1 then
+        return short:byte(1) + short:byte(2)%8*256,  math.floor(short:byte(2)/8)
+    elseif sys == 2 then
+        return short:byte(1), short:byte(2)
+    elseif sys == 3 then
+        return short:byte(1) + short:byte(2)%8*256,  math.floor(short:byte(2)%128/8)
     end
-    return sig
 end
 
-local flag_1_mapping = {
-    [1] = decode.Enchanted,
-    [2] = decode.Augmented,
-    }
+function tools.aug.string_augment(sys,id,val)
+    local augment
+    local augment_table = augment_values[sys][id]
+    if not augment_table then --print('Augments Lib: ',sys,id)
+    elseif augment_table.Secondary_Handling then
+        -- This is handling for system 1's indices 0x390~0x392, which have their own static augment lookup table
+        augment_table = sp_390_augments[ (id-0x390)*16 + 545 + val]
+    end
+    if augment_table then
+        if sys == 3 then
+            augment = augment_table[1].stat
+            local pot = augment_table[1].potency[val]
+            if pot > 0 then
+                augment = augment..'+'
+            end
+            augment = augment..pot
+        else
+            for i,v in pairs(augment_table) do
+                if i > 1 then augment = augment..' ' end
+                augment = (augment or '')..v.stat
+                local potency = ((val+v.offset)*(v.multiplier or 1))
+                if potency > 0 then augment = augment..'+'..potency
+                elseif potency < 0 then  augment = augment..potency end
+                if v.percent then
+                    augment = augment..'%'
+                end
+            end
+        end
+    else
+        augment = 'System: '..tostring(sys)..' ID: '..tostring(id)..' Val: '..tostring(val)
+    end
+    return augment
+end
 
+function tools.aug.augments_to_table(sys,str)
+    local augments,ids,vals = {},{},{}
+    for i=1,#str,2 do
+        local id,val = tools.aug.unpack_augment(sys,str:sub(i,i+1))
+        augments[#augments+1] = tools.aug.string_augment(sys,id,val)
+    end
+    return augments
+end
+
+function decode.Enchanted(str)
+    local rettab = {type = 'Enchanted Equipment',
+        charges_remaining = str:byte(2),
+        usable = str:byte(4)%128/64>=1,
+        next_use_time = str:unpack('I',5) + server_timestamp_offset,
+        activation_time = str:unpack('I',9) + server_timestamp_offset,
+        }
+    return rettab
+end
+
+function decode.Augmented(str)
+    local flag_2 = str:byte(2)
+    local rettab = {type = 'Augmented Equipment'}
+    if flag_2%128/64>= 1 then
+        rettab.trial_number = (str:byte(12)%128)*256+str:byte(11)
+        rettab.trial_complete = str:byte(12)/128>=1
+    end
+    
+    if flag_2%64/32 >=1 then
+        rettab.augment_system = 2
+        local path_map = {[0] = 'A',[1] = 'B', [2] = 'C', [3] = 'D'}
+        local points_map = {[1] = 50, [2] = 80, [3] = 120, [4] = 170, [5] = 220, [6] = 280, [7] = 340, [8] = 410, [9] = 480, [10]=560, [11]=650, [12] = 750, [13] = 960, [14] = 980}
+        rettab.path = path_map[str:byte(3)%4]
+        rettab.rank = math.floor(str:byte(3)%128/4)
+        rettab.RP = math.max(points_map[rettab.rank] or 0 - str:byte(6)*256 - str:byte(5),0)
+        rettab.augments = tools.aug.augments_to_table(rettab.augment_system,str:sub(7,12))
+    elseif flag_2/128 >= 1 then -- Evolith
+        rettab.augment_system = 3
+        local slot_type_map = {[0] = 'None', [1] = 'Filled Upside-down Triangle', [2] = 'Filled Diamond', [3] = 'Filled Star', [4] = 'Empty Triangle', [5] = 'Empty Square', [6] = 'Empty Circle', [7] = 'Empty Upside-down Triangle', [8] = 'Empty Diamond', [9] = 'Empty Star', [10] = 'Filled Triangle', [11] = 'Filled Square', [12] = 'Filled Circle', [13] = 'Empty Circle', [14] = 'Fire', [15] = 'Ice'}
+        rettab.slots = {[1] = {type = slot_type_map[str:byte(9)%16], size = math.floor(str:byte(10)/16)+1, element = str:byte(12)%8},
+            [2] = {type = slot_type_map[math.floor(str:byte(9)/16)], size = str:byte(11)%16+1, element = math.floor(str:byte(12)/8)%8},
+            [3] = {type = slot_type_map[str:byte(10)%16], size = math.floor(str:byte(11)/16)+1, element = math.floor(str:byte(12)/64) + math.floor(str:byte(8)/128)},
+            }
+        rettab.augments = tools.aug.augments_to_table(rettab.augment_system,str:sub(3,8))
+    else
+        rettab.augment_system = 1
+        if rettab.trial_number then
+            rettab.augments = tools.aug.augments_to_table(rettab.augment_system,str:sub(3,10))
+        else
+            rettab.augments = tools.aug.augments_to_table(rettab.augment_system,str:sub(3,12))
+        end
+    end
+    return rettab
+end
+
+
+
+-- EXTDATA subgroups
+-- Which subgroup an item falls into depends on its type, which is pulled from the resources based on ites item ID.
 
 function decode.General(str)
     decoded = {type = 'General'}
     if str:byte(13) ~= 0 then
-        decoded.signature = decode.Signature(str:sub(13))
+        decoded.signature = tools.sig.decode(str:sub(13))
     end
     return decoded
 end
 
-function decode.Mannequin(str)
--- I can't test this.
-    local rettab = {type = 'Mannequin',
-        is_displayed = (str:byte(2)%128/64 >= 1)
+function decode.Fish(str)
+    local rettab = {
+        size = str:unpack('H'),
+        weight = str:unpack('H',3),
+        is_ranked = str:byte(5)%2 == 1
     }
-    if rettab.is_displayed then
-        rettab.grid_x = str:byte(7)
-        rettab.grid_z = str:byte(8)
-        rettab.grid_y = str:byte(9)
-        local storage = windower.ffxi.get_items(2)
-        local empty = {}
-        rettab.equipment = {main = storage[str:byte(11)] or empty, sub = storage[str:byte(12)] or empty,
-            ranged = storage[str:byte(13)] or empty, head = storage[str:byte(14)] or empty, body = storage[str:byte(15)] or empty,
-            hands = storage[str:byte(16)] or empty, legs = storage[str:byte(17)] or empty, feet = storage[str:byte(18)] or empty}
-        rettab.race_id = str:byte(19)
-        rettab.race = res.races[rettab.race_id]
-        rettab.pose_id = str:byte(20)
+    return rettab
+end
+
+function decode.Equipment(str)
+    local rettab
+    local flag_1 = str:byte(1)
+    local flag_1_mapping = {
+        [1] = decode.Enchanted,
+        [2] = decode.Augmented,
+        }
+    if flag_1_mapping[flag_1] then
+        rettab = flag_1_mapping[flag_1](str:sub(1,12))
+    else
+        rettab= decode.Unknown(str:sub(1,12))
+        rettab.type = 'Equipment'
+    end
+    if str:byte(13) ~= 0 then
+        rettab.signature = tools.sig.decode(str:sub(13))
     end
     return rettab
 end
@@ -1215,7 +1519,7 @@ function decode.Linkshell(str)
         b  = 17*str:byte(8)%16,
         status_id = str:byte(9),
         status = status_map[str:byte(9)],
-        name = decode.bit_string(6,str:sub(10,name_end),name_map)}
+        name = tools.bit.bit_string(6,str:sub(10,name_end),name_map)}
     
     return rettab
 end
@@ -1267,14 +1571,20 @@ function decode.Flowerpot(str)
 end
 
 function decode.Mannequin(str)
--- I can't test this.
     local rettab = {type = 'Mannequin',
         is_displayed = (str:byte(2)%128/64 >= 1)
     }
     if rettab.is_displayed then
+        local facing_map = {
+            [0] = 'West',
+            [1] = 'South',
+            [2] = 'East',
+            [3] = 'North',
+            }
         rettab.grid_x = str:byte(7)
         rettab.grid_z = str:byte(8)
         rettab.grid_y = str:byte(9)
+        rettab.facing = facing_map[str:byte(10)]
         local storage = windower.ffxi.get_items(2)
         local empty = {}
         rettab.equipment = {main = storage[str:byte(11)] or empty, sub = storage[str:byte(12)] or empty,
@@ -1284,6 +1594,118 @@ function decode.Mannequin(str)
         rettab.race = res.races[rettab.race_id]
         rettab.pose_id = str:byte(20)
     end
+    return rettab
+end
+
+function decode.PvPReservation(str)
+    local rettab = {type='PvP Reservation',
+        time = str:unpack('I') + server_timestamp_offset,
+        level = math.floor(str:byte(4)/32)*10
+    }
+    if rettab.level == 0 then rettab.level = 99 end
+    return rettab
+end
+
+function decode.SoulPlate(str)
+    local name_end = string.find(str,string.char(0),1)
+    local name_map = {}
+    for i = 1,127 do
+        name_map[i] = string.char(i)
+    end
+    local rettab = {type = 'Soul Plate',
+            skill_id = math.floor(str:byte(21)/128) + str:byte(22)*2 + str:byte(23)%8*(2^9), -- Index for whatever table I end up making, so table[skill_id] would be {name = "Breath Damage", multiplier = 1, percent=true}
+            skill = soul_plates[math.floor(str:byte(21)/128) + str:byte(22)*2 + str:byte(23)%8*(2^9)] or 'Unknown', -- "Breath damage +5%, etc."
+            FP = math.floor(str:byte(23)/8) + str:byte(24)%4*16, -- Cost in FP
+            name = tools.bit.bit_string(7,str:sub(1,name_end),name_map), -- Name of the monster
+--            9D 87 AE C0 = 'Naul'
+        }
+    return rettab
+end
+
+function decode.Reflector(str)
+    local firstnames = {"Bloody", "Brutal", "Celestial", "Combat", "Cyclopean", "Dark", "Deadly",
+            "Drachen", "Giant", "Hostile", "Howling", "Hyper", "Invincible", "Merciless", "Mighty",
+            "Necro", "Nimble", "Poison", "Putrid", "Rabid", "Radiant", "Raging", "Relentless",
+            "Savage", "Silent", "Tenebrous", "The", "Triple", "Undead", "Writhing", "Serpentine",
+            "Aile", "Bete", "Croc", "Babine", "Carapace", "Colosse", "Corne", "Fauve",
+            "Flamme", "Griffe", "Machoire", "Mandibule", "Patte", "Rapace", "Tentacule", "Voyou",
+            "Zaubernder", "Brutaler", "Explosives", "Funkelnder", "Kraftvoller", "Moderndes", "Tosender", "Schwerer",
+            "Sprintender", "Starker", "Stinkender", "Taumelnder", "Tolles", "Verlornes", "Wendiger", "Wuchtiger"}
+        firstnames[0] = "Pit"
+    local lastnames = {"Beast", "Butcher", "Carnifex", "Critter", "Cyclone", "Dancer", "Darkness",
+            "Erudite", "Fang", "Fist", "Flayer", "Gladiator", "Heart", "Howl", "Hunter",
+            "Jack", "Machine", "Mountain", "Nemesis", "Raven", "Reaver", "Rock", "Stalker",
+            "T", "Tiger", "Tornado", "Vermin", "Vortex", "Whispers", "X", "Prime",
+            "Agile", "Brave", "Coriace", "Diabolique", "Espiegle", "Feroce", "Fidele", "Fourbe",
+            "Impitoyable", "Nuisible", "Robuste", "Sanguinaire", "Sauvage", "Stupide", "Tenace", "Tendre",
+            "Boesewicht", "Engel", "Flitzpiepe", "Gottkaiser", "Klotz", "Muelleimer", "Pechvogel", "Postbote",
+            "Prinzessin", "Raecherin", "Riesenbaby", "Hexer", "Teufel", "Vieh", "Vielfrass", "Fleischer"}
+        lastnames[0] = "Monster"
+    local rettab = {type='Reflector',
+        first_name = firstnames[str:byte(1)%64],
+        last_name = lastnames[math.floor(str:byte(1)/64) + (str:byte(2)%16)*4],
+        level = (math.floor(str:byte(7)/16) + (str:byte(8)%16)*16)%128
+    }
+    return rettab
+end
+
+function decode.BonanzaMarble(str)
+    local event_list = {
+        [0x00] = 'CS Event Race',
+        [0x01] = 'Race Type 1',
+        [0x02] = 'Race Type 2',
+        [0x03] = 'Race Type 3',
+        [0x04] = 'Race Type 4',
+        [0x05] = 'Race Type 5',
+        [0x06] = 'Race Type 6',
+        [0x07] = 'Race Type 7',
+        [0x08] = 'Race Type 8',
+        [0x09] = 'Race Type 9',
+        [0x0A] = 'Race Type 10',
+        [0x0B] = 'Altana Cup II',
+        [0x0C] = 'C1 Crystal Stakes',
+        [0x0D] = 'C2 Chocobo Race',
+        [0x0E] = 'C3 Chocobo Race',
+        [0x0F] = 'C4 Chocobo Race',
+        [0x3D] = 'Ohohohohoho!',
+        [0x3E] = 'Item Level:%d',
+        [0x3F] = 'Type:%c/Rank:%d/RP:%d',
+        [0x40] = '6th Anniversary Mog Bonanza',
+        [0x41] = '7th Anniversary Mog Bonanza',
+        [0x42] = 'Moggy New Year Bonanza',
+        [0x43] = '8th Anniversary Mog Bonanza',
+        [0x44] = 'Moggy New Year Bonanza',
+        [0x45] = '9th Anniversary Mog Bonanza',
+        [0x46] = 'Mog Bonanza Home Coming',
+        [0x47] = "11th Vana'versary Mog Bonanza",
+        [0x48] = 'I Dream of Mog Bonanza 2014',
+        [0x49] = '12th Anniversary Mog Bonanza',
+        [0x4A] = 'I Dream of Mog Bonanza 2015',
+    }
+    local rettab = {type = 'Bonanza Marble',
+        number = str:byte(3)*256*256 + str:unpack('H',1), -- Who uses 3 bytes? SE does!
+        event = typ_list[str:byte(4)] or (str:byte(4) < 0x4B and '.'),
+    }
+    return rettab
+end
+
+function decode.LegionPass(str)
+    local chamber_list = {
+        [0x2EF] = "Hall of An: 18 combatants",
+        [0x2F0] = "Hall of An: 36 combatants",
+        [0x2F1] = "Hall of Ki: 18 combatants",
+        [0x2F2] = "Hall of Ki: 36 combatants",
+        [0x2F3] = "Hall of Im: 18 combatants",
+        [0x2F4] = "Hall of Im: 36 combatants",
+        [0x2F5] = "Hall of Muru: 18 combatants",
+        [0x2F6] = "Hall of Muru: 36 combatants",
+        [0x2F7] = "Hall of Mul: 18 combatants",
+        [0x2F8] = "Hall of Mul: 36 combatants",}
+    local rettab = {type = 'Legion Pass',
+        entry_time = str:unpack('I',1) + server_timestamp_offset,
+        leader = tools.sig.decode(str:sub(13,24)),
+        chamber = chamber_list[str:unpack('H',5)] or 'Unknown',
+        }
     return rettab
 end
 
@@ -1345,139 +1767,51 @@ function decode.EmptySlot(str)
     return rettab
 end
 
-function decode.Fish(str)
-    local rettab = {
-        size = str:unpack('H'),
-        weight = str:unpack('H',3),
-        is_ranked = str:byte(5)%2 == 1
+
+-- In general, the function used to decode an item's extdata is determined by its type, which can be looked up using its item ID in the resources.
+typ_mapping = {
+    [1] = decode.General, -- General
+    [2] = decode.General, -- Fight Entry Items
+    [3] = decode.Fish, -- Fish
+    [4] = decode.Equipment, -- Weapons
+    [5] = decode.Equipment, -- Armor
+    [6] = decode.Linkshell, -- Linkshells (but not broken linkshells)
+    [7] = decode.General, -- Usable Items
+    [8] = decode.General, -- Crystals
+    [10] = decode.Furniture, -- Furniture
+    [11] = decode.General, -- Seeds, reason for extdata unclear
+    [12] = decode.Flowerpot, -- Flowerpots
+    [14] = decode.Mannequin, -- Mannequins
+    [15] = decode.PvPReservation, -- Ballista Books
+    --[16] = decode.Chocobo, -- Chocobo paraphenelia (eggs, cards, slips, etc.)
+    --[17] = decode.ChocoboTicket, -- Chocobo Ticket and Completion Certificate
+    [18] = decode.SoulPlate, -- Soul Plates
+    [19] = decode.Reflector, -- Soul Reflectors
+    --[20] = decode.SalvageLog, -- Salvage Logs for the Mythic quest
+    [21] = decode.BonanzaMarble, -- Mog Bonanza Marbles
+    --[22] = decode.MazeTabulaM, -- MMM Maze Tabula M
+    --[23] = decode.MazeTabulaR, -- MMM Maze Tabula R
+    --[24] = decode.MazeVoucher, -- MMM Maze Vouchers
+    --[25] = decode.MazeRunes, -- MMM Maze Runes
+    --[26] = decode.Evoliths, -- Evoliths
+    --[27] = decode.StorageSlip, -- Storage Slips, already handled by slips.lua
+    [28] = decode.LegionPass, -- Legion Pass
+    --[29] = decode.MeeblesGrimore, -- Meebles Burrow Grimoires
     }
-    return rettab
-end
 
-function decode.Equipment(str)
-    local rettab
-    local flag_1 = str:byte(1)
-    if flag_1_mapping[flag_1] then
-        rettab = flag_1_mapping[flag_1](str:sub(1,12))
-    else
-        rettab= decode.Unknown(str:sub(1,12))
-        rettab.type = 'Equipment'
-    end
-    if str:byte(13) ~= 0 then
-        rettab.signature = decode.Signature(str:sub(13))
-    end
-    return rettab
-end
-
-function decode.PvPReservation(str)
-    local rettab = {type='PvP Reservation',
-        time = str:unpack('I') + server_timestamp_offset,
-        level = math.floor(str:byte(4)/32)*10
-    }
-    if rettab.level == 0 then rettab.level = 99 end
-    return rettab
-end
-
-function decode.Reflector(str)
-    local firstnames = {"Bloody", "Brutal", "Celestial", "Combat", "Cyclopean", "Dark", "Deadly",
-            "Drachen", "Giant", "Hostile", "Howling", "Hyper", "Invincible", "Merciless", "Mighty",
-            "Necro", "Nimble", "Poison", "Putrid", "Rabid", "Radiant", "Raging", "Relentless",
-            "Savage", "Silent", "Tenebrous", "The", "Triple", "Undead", "Writhing", "Serpentine",
-            "Aile", "Bete", "Croc", "Babine", "Carapace", "Colosse", "Corne", "Fauve",
-            "Flamme", "Griffe", "Machoire", "Mandibule", "Patte", "Rapace", "Tentacule", "Voyou",
-            "Zaubernder", "Brutaler", "Explosives", "Funkelnder", "Kraftvoller", "Moderndes", "Tosender", "Schwerer",
-            "Sprintender", "Starker", "Stinkender", "Taumelnder", "Tolles", "Verlornes", "Wendiger", "Wuchtiger"}
-        firstnames[0] = "Pit"
-    local lastnames = {"Beast", "Butcher", "Carnifex", "Critter", "Cyclone", "Dancer", "Darkness",
-            "Erudite", "Fang", "Fist", "Flayer", "Gladiator", "Heart", "Howl", "Hunter",
-            "Jack", "Machine", "Mountain", "Nemesis", "Raven", "Reaver", "Rock", "Stalker",
-            "T", "Tiger", "Tornado", "Vermin", "Vortex", "Whispers", "X", "Prime",
-            "Agile", "Brave", "Coriace", "Diabolique", "Espiegle", "Feroce", "Fidele", "Fourbe",
-            "Impitoyable", "Nuisible", "Robuste", "Sanguinaire", "Sauvage", "Stupide", "Tenace", "Tendre",
-            "Boesewicht", "Engel", "Flitzpiepe", "Gottkaiser", "Klotz", "Muelleimer", "Pechvogel", "Postbote",
-            "Prinzessin", "Raecherin", "Riesenbaby", "Hexer", "Teufel", "Vieh", "Vielfrass", "Fleischer"}
-        lastnames[0] = "Monster"
-    local rettab = {type='Reflector',
-        first_name = firstnames[str:byte(1)%64],
-        last_name = lastnames[math.floor(str:byte(1)/64) + (str:byte(2)%16)*4],
-        level = (math.floor(str:byte(7)/16) + (str:byte(8)%16)*16)%128
-    }
-    return rettab
-end
-
-function decode.SoulPlate(str)
-    local name_end = string.find(str,string.char(0),1)
-    local name_map = {}
-    for i = 1,127 do
-        name_map[i] = string.char(i)
-    end
-    local rettab = {type = 'Soul Plate',
-            skill_id = math.floor(str:byte(21)/128) + str:byte(22)*2 + str:byte(23)%8*(2^9), -- Index for whatever table I end up making, so table[skill_id] would be {name = "Breath Damage", multiplier = 1, percent=true}
---            skill = nil, -- "Breath damage +5%, etc."
-            FP = math.floor(str:byte(23)/8) + str:byte(24)%4*16, -- Cost in FP
-            name = decode.bit_string(7,str:sub(1,name_end),name_map), -- Name of the monster
---            9D 87 AE C0 = 'Naul'
-        }
-    return rettab
-end
-
-
-local typ_mapping = {
---[[Types:
-    *1 = General
-    *2 = Fight entry items
-    *3 = Fish
-    *4 = Weapon
-    *5 = Armor
-    *6 = Linkshells (but not broken linkshells?)
-    *7 = Usable items
-    *8 = Crystals
-    *10 = Furniture
-    *11 = Seeds
-    *12 = Flowerpot
-    *14 = Mannequin
-    
-    *15 = Ballista books
-    16 = Chocobo Paraphenelia (Eggs, Cards, slips, etc.)
-    17 = Chocobo Ticket and Completion Certificate
-    18 = Soul Plates
-    *19 = Soul Reflectors
-    20 = Salvage logs
-    21 = Bonanza Marble
-    22 = Maze Tabula M
-    23 = Maze Tabula R
-    24 = Maze Voucher
-    25 = Maze Rune
-    26 = Evoliths
-    
-    27 = Storage Slip
-    
-    28 = Legion Pass
-    29 = Meebles Burrow Grimoires
-]]
-    [1] = decode.General,
-    [2] = decode.General, -- Unknown if used BCNM orbs contain information
-    [3] = decode.Fish,
-    [4] = decode.Equipment,
-    [5] = decode.Equipment,
-    [6] = decode.Linkshell,
-    [7] = decode.General,
-    [8] = decode.General,
-    [10] = decode.Furniture,
-    [11] = decode.General,
-    [12] = decode.Flowerpot,
-    [14] = decode.Mannequin,
-    [15] = decode.PvPReservation,
-    [18] = decode.SoulPlate,
-    [19] = decode.Reflector,
-    }
-    
-local id_mapping = {
+-- However, some items appear to have the function they use hardcoded based purely on their ID.
+id_mapping = {
     [0] = decode.EmptySlot,
     [4237] = decode.Hourglass,
     [5414] = decode.Lamp,
     }
 
+
+
+-- ACTUAL EXTDATA LIB FUNCTIONS
+    
+local extdata = {}
+    
 function extdata.decode(tab)
     if not tab then error('extdata.decode was passed a nil value') end
     if not tab.id or not tonumber(tab.id) then
@@ -1514,15 +1848,23 @@ end
 ----    current augments. Will return false if there are excess goal augments
 ----    or the goal augments do not match the current augments.
 -----------------------------------------------------------------------------------
-function extdata.compare_augments(goal,current)
+function extdata.compare_augments(goal_augs,current)
     if not current then return false end
+    local cur = T{}
+    for i,v in pairs(table.filter(current,-functions.equals('none'))) do
+        cur:append(v)
+    end
+    local goal = T{}
+    for i,v in pairs(table.filter(goal_augs,-functions.equals('none'))) do
+        goal:append(v)
+    end
     local num_augments = 0
     local aug_strip = function(str)
         return str:lower():gsub('[^%-%w,]','')
     end 
-    for aug_ind,augment in pairs(current) do
+    for aug_ind,augment in pairs(cur) do
         if augment == 'none' then
-            current[aug_ind] = nil
+            cur[aug_ind] = nil
         else
             num_augments = num_augments + 1
         end
@@ -1530,14 +1872,23 @@ function extdata.compare_augments(goal,current)
     if num_augments < #goal then
         return false
     else
+        local function recheck_lib(str)
+            local sys, id, val = string.match(str,'System: (%d+) ID: (%d+) Val: (%d+)')
+            if tonumber(sys) and tonumber(id) and tonumber(val) then
+                str = tools.aug.string_augment(tonumber(sys),tonumber(id),tonumber(val))
+            end
+            return str
+        end
         local count = 0
         for goal_ind,goal_aug in pairs(goal) do
             local bool
-            for cur_ind,cur_aug in pairs(current) do
+            for cur_ind,cur_aug in pairs(cur) do
+                goal_aug = recheck_lib(goal_aug)
+                cur_aug = recheck_lib(cur_aug)
                 if aug_strip(goal_aug) == aug_strip(cur_aug) then
                     bool = true
                     count = count +1
-                    current[cur_ind] = nil
+                    cur[cur_ind] = nil
                     break
                 end
             end
