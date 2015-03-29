@@ -78,35 +78,39 @@ end
 
 function items:route(start_bag,start_ind,end_bag,count)
     count = count or self[start_bag][start_ind].count
-    local failure = false
+    local success = true
     local initial_ind = start_ind
     if start_bag ~= 0 and self[0]._info.n < 80 then
         start_ind = self[start_bag][start_ind]:move(0,0x52,count)
     elseif start_bag ~= 0 and self[0]._info.n >= 80 then
-        failure = true
+        success = false
         org_warning('Cannot move more than 80 items into inventory')
     end
         
     if start_ind and end_bag ~= 0 and self[end_bag]._info.n < 80 then
         self[0][start_ind]:transfer(end_bag,count)
     elseif not start_ind then
-        failure = true
+        success = false
         org_warning('Initial movement of the route failed. ('..tostring(start_bag)..' '..tostring(initial_ind)..' '..tostring(start_ind)..' '..tostring(end_bag)..')')
     elseif self[end_bag]._info.n >= 80 then
-        failure = true
+        success = false
         org_warning('Cannot move more than 80 items into that inventory ('..end_bag..')')
     end
-    return not failure
+    return success
 end
 
 function items:it()
     local i = 0
+    local bag_priority_list = {}
+    for i,v in pairs(settings.bag_priority) do
+        bag_priority_list[v] = i
+    end
     return function ()
-        while i < #settings.bag_priority do
+        while i < #bag_priority_list do
             i = i + 1
-            local id = s_to_bag(settings.bag_priority[i])
+            local id = s_to_bag(bag_priority_list[i])
             if not id then
-                org_error('The bag name ("'..tostring(settings.bag_priority[i])..'") in bag_priority entry #'..tostring(i)..' in the ../addons/organizer/data/settings.xml file is not valid.\nValid options are '..tostring(res.bags))
+                org_error('The bag name ("'..tostring(bag_priority_list[i])..'") with priority '..tostring(i)..' in the ../addons/organizer/data/settings.xml file is not valid.\nValid options are '..tostring(res.bags))
             end
             if self[id] and validate_bag(res.bags[id]) then return id, self[id] end
         end
