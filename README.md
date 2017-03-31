@@ -1,14 +1,27 @@
-Lua
+Addon Bug reports
 ===
-Lua Addons and Scripts  
-Lua documentation can be found at the Windower Development wiki: http://dev.windower.net/doku.php?id=lua:start
+This is the location for reporting issues with Byrth-related addons. Those would be:
+* AnsweringMachine
+* Battlemod
+* Daze
+* GearSwap
+* InstaLS
+* Organizer
+* Plugin_manager
+* Pointwatch
+* Remember
+* Respond
+* Send
+* Shortcuts
+* Translate
+For all other addons, please visit the main Lua issue tracker: https://github.com/Windower/Lua/issues
 
 Licensing
 ---------
-We require that all submissions to the Windower/Lua repository be licensed under the BSD license, reproduced below. To do this, simply place the license text in a comment at the top of each of your source files, and replace &lt;year&gt;, &lt;addon name&gt; and both instances of &lt;your name&gt; with appropriate values.
+All submissions to the Windower/Lua repository are licensed under the BSD license, reproduced below.
 
 ```
-Copyright (c) <year>, <your name>
+Copyright (c) 2010-2017, Byrth
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
