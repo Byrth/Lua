@@ -14,6 +14,7 @@ This is the location for reporting issues with Byrth-related addons. Those would
 * Send
 * Shortcuts
 * Translate
+
 For all other addons, please visit the main Lua issue tracker: https://github.com/Windower/Lua/issues
 
 Licensing
